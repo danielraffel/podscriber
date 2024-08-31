@@ -40,7 +40,7 @@ Before running the script, you will need to modify the `config.py` file with the
      2. Click "Generate new token" and select the `repo` scope.
      3. Copy the generated token and replace the placeholder in `config.py`:
         ```python
-        GITHUB_TOKEN = "your_github_token"
+        GITHUB_TOKEN = "YOUR_GITHUB_TOKEN"
         ```
      4. Save the `config.py` file.
 
