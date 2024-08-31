@@ -105,4 +105,6 @@ This cron job will execute `podscriber.py` every day at 2 AM.
 
 ## Work in Progress
 
-Please note that `podscriber` is a work in progress.
+Please note that `podscriber` is a work in progress. Additional ToDo items:
+- Explain how the podcast `listened to` RSS feed is being generated from Overcast with the MP3 enclosure URL
+- Link to an example HTML page
