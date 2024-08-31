@@ -29,11 +29,9 @@ Before running the script, you will need to modify the `config.py` file with the
 
 1. **RSS Feed URL**: 
    - Set the `RSS_FEED_URL` to the feed you want to monitor for new podcast episodes.
-   - Example: `RSS_FEED_URL = "https://your-podcast-feed-url.xml"`
 
 2. **GitHub Username**: 
    - Update the `GITHUB_USERNAME` with your GitHub username where the repository will be hosted.
-   - Example: `GITHUB_USERNAME = "your_github_username"`
 
 3. **GitHub Token**: 
    - Set the `GITHUB_TOKEN` with a Personal Access Token from GitHub. This token is required for authentication to commit files and create the repository.
