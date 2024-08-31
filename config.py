@@ -28,7 +28,7 @@ UPDATE_HTML_LINKS = True # Set to True to update HTML links in the PODCAST_HISTO
 ENABLE_GITHUB_PAGES = True # Set to True to enable GitHub Pages automatically after processing
 
 # Debugging and Testing
-# DEBUG_MODE_LIMIT = 2  # Set this to limit the number of files to download during debugging for example 2. Set to None or remove to disable.
+DEBUG_MODE_LIMIT = None  # Set this to limit the number of files to download during debugging for example 2. Set to None or a number if you comment out it will cause a problem.
 
 # Instructions for setting up GitHub Token
 # 1. Go to https://github.com/settings/tokens and create a new Personal Access Token with just the `repo` scope.
