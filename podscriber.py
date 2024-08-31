@@ -317,6 +317,11 @@ def install_whisper():
         os.makedirs(whisper_setup_path, exist_ok=True)
         print("Attempting to install Whisper...")
         os.system(f"git clone https://github.com/danielraffel/WhisperSetup.git {whisper_setup_path}")
+        
+        # Add execute permissions to the setup script
+        os.system(f"chmod +x {whisper_setup_path}/whisper_setup.sh")
+        
+        # Run the setup script
         os.system(f"cd {whisper_setup_path} && ./whisper_setup.sh")
         print("Whisper installation complete.")
     except Exception as e:
