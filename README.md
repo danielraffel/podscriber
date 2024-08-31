@@ -108,3 +108,4 @@ This cron job will execute `podscriber.py` every day at 2 AM.
 Please note that `podscriber` is a work in progress. Additional ToDo items:
 - Explain how the podcast `listened to` RSS feed is being generated from Overcast with the MP3 enclosure URL
 - Link to an example HTML page
+- Explain some of the additional checks the script does (like confirming git is authorized and an ssh key is installed, etc)
