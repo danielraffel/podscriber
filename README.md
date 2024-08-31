@@ -1,6 +1,6 @@
 # Podscriber
 
-`podscriber` is a Python-based tool that downloads podcast episodes, transcribes them using Whisper, and generates an HTML archive of your listening history. This archive is hosted on GitHub, with each episode linked to its transcript, allowing you to revisit and search through both the audio and text of what you've listened to.
+`podscriber` is a Python-based tool for macOS that downloads podcast episodes, transcribes them using Whisper, and generates an HTML archive of your listening history. This archive is hosted on GitHub, with each episode linked to its transcript, allowing you to revisit and search through both the audio and text of what you've listened to.
 
 ## Prerequisites
 
