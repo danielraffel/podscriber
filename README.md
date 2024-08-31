@@ -90,7 +90,7 @@ https://<GITHUB_USERNAME>.github.io/<GITHUB_REPO_NAME>/
 To keep your podcast downloads and transcriptions up to date, you might want to automate the process using a cron job. Here’s an example cron job that runs the script once a day:
 
 ```bash
-0 2 * * * cd ~/podscriber && uv run python podscriber.py
+0 2 * * * cd ~/podscriber && ~/.cargo/bin/uv run python3 podscriber.py
 ```
 
 This cron job will execute `podscriber.py` every day at 2 AM.
