@@ -8,9 +8,14 @@ Before running `podscriber`, ensure you have the following installed:
 
 - **uv**: [UV](https://astral.sh/blog/uv-unified-python-packaging) is a fast Python package and project manager.
 - **Git**: Required for committing files to a GitHub repository.
+- **Python**: Although `uv` can install and manage Python versions, having Python pre-installed can streamline the setup.
+
+Be aware that if you do not have these installed `podscriber` will install them at run-time:
+- **Brew**: Needed for installing SQLite and Git LFS.
+- **SQLite**: Required for managing a DB with your up-to-date podcast episodes, transcripts, media files and for generating a browsable HTML archive.
+- **Git LFS**: Required for committing large files (MP3/WAV) to a GitHub repository.
 - **Whisper**: A speech-to-text model that `podscriber` uses to transcribe podcast audio.
 - **ffmpeg**: Needed for converting audio files during the transcription process.
-- **Python**: Although `uv` can install and manage Python versions, having Python pre-installed can streamline the setup.
 
 ### Whisper Setup
 
@@ -79,10 +84,10 @@ When the script runs, it can optionally create a GitHub Pages site where your tr
 
 ### Example GitHub Pages URL
 
-If you configure your `GITHUB_USERNAME` and `GITHUB_REPO_NAME` in `config.py`, the generated GitHub Pages site will be accessible at:
+If you configure your `GITHUB_USERNAME`, `GITHUB_REPO_NAME` and `PODCAST_HISTORY_FILE` in `config.py`, the generated GitHub Pages site will be accessible at:
 
 ```
-https://<GITHUB_USERNAME>.github.io/<GITHUB_REPO_NAME>/
+https://<GITHUB_USERNAME>.github.io/<GITHUB_REPO_NAME>/<PODCAST_HISTORY_FILE>
 ```
 
 ## Suggested Usage: Automate with Cron
@@ -94,3 +99,49 @@ To keep your podcast downloads and transcriptions up to date, you might want to 
 ```
 
 This cron job will execute `podscriber.py` every day at 2 AM.
+
+## To-Do: Explain overcast-podcast-activity-feed integration
+
+Enhance the explanation of how I’m integrating this with [overcast-podcast-activity-feed](https://github.com/dblume/overcast-podcast-activity-feed) by incorporating an enclosure URL.
+
+I’ve made some modifications to [overcast.py](https://github.com/dblume/overcast-podcast-activity-feed/blob/main/overcast.py) to expose MP3 files. You can view the updated sections in this [gist](https://gist.github.com/danielraffel/5b981fdb72bbf96b28dc3f87fab1c81f). Here are the specific changes:
+
+```python
+class Episode:
+    def __init__(self, podcast, title, url, guid, date, partial, enclosure_url):
+        self.podcast = podcast
+        self.title = title
+        self.url = url
+        self.guid = guid
+        self.date = date
+        self.partial = partial
+        self.enclosure_url = enclosure_url
+```
+
+```python
+def rss(self) -> str:
+    date = self.std_date()
+    t = time.strptime(date, "%Y-%m-%dT%H:%M:%S%z")
+    date = time.strftime("%a, %d %b %Y %H:%M:%S " + date[-5:], t)
+    return (f"<item>"
+            f"<title>{escape(self.podcast)}: {escape(self.title)}</title>"
+            f"<pubDate>{date}</pubDate>"
+            f"<link>{escape(self.url)}</link>"
+            f"<guid isPermaLink=\"true\">{self.guid}</guid>"
+            f"<description><![CDATA[{self.podcast}: {self.title} on {date}]]></description>"
+            f"<enclosure url=\"{escape(self.enclosure_url)}\" length=\"0\" type=\"audio/mpeg\" />"
+            f"</item>\n")
+```
+
+```python
+episodes: List[Episode] = list()
+for rss in root.findall('.//outline[@type="rss"]'):
+    rss_title = rss.attrib['title']
+    for ep in rss.findall('outline[@type="podcast-episode"]'):
+        if add_episode(ep):
+            enclosure_url = ep.attrib.get('enclosureUrl', '')
+            episodes.append(Episode(rss_title, ep.attrib['title'], ep.attrib['url'],
+                ep.attrib['overcastUrl'], ep.attrib['userUpdatedDate'],
+                'progress' in ep.attrib, enclosure_url))
+episodes.sort(reverse=True)
+```
