@@ -102,9 +102,7 @@ This cron job will execute `podscriber.py` every day at 2 AM.
 
 ## To-Do: Explain overcast-podcast-activity-feed integration
 
-Enhance the explanation of how I’m integrating this with [overcast-podcast-activity-feed](https://github.com/dblume/overcast-podcast-activity-feed) by incorporating an enclosure URL.
-
-I’ve made some modifications to [overcast.py](https://github.com/dblume/overcast-podcast-activity-feed/blob/main/overcast.py) to expose MP3 files. You can view the updated sections in this [gist](https://gist.github.com/danielraffel/5b981fdb72bbf96b28dc3f87fab1c81f). Here are the specific changes:
+Perhaps I'll get around to explaining how I’m integrating this with [overcast-podcast-activity-feed](https://github.com/dblume/overcast-podcast-activity-feed). In the interim, I’ve made some modifications to [overcast.py](https://github.com/dblume/overcast-podcast-activity-feed/blob/main/overcast.py) to expose MP3 files using the `enclosure_url`. You can view the updated sections in this [gist](https://gist.github.com/danielraffel/5b981fdb72bbf96b28dc3f87fab1c81f). This allows me to access the podcast audio files I've listened to in Overcast and process them with Whisper. Here are the specific changes:
 
 ```python
 class Episode:
