@@ -21,7 +21,7 @@ from config import (
 # Constants
 REPO_ROOT = os.path.expanduser(REPO_ROOT)
 PODCAST_AUDIO_FOLDER = os.path.expanduser(PODCAST_AUDIO_FOLDER)
-PODCAST_HISTORY_FILE = os.path.join(REPO_ROOT, "podcast_history.html")
+PODCAST_HISTORY_FILE = os.path.expanduser(PODCAST_HISTORY_FILE)
 TRANSCRIBED_FOLDER = os.path.join(REPO_ROOT, "transcribed")
 DB_PATH = os.path.join(REPO_ROOT, "podcasts.db")
 
@@ -58,8 +58,10 @@ def enable_github_pages():
     
     response = requests.post(url, headers=headers, json=data)
     if response.status_code in [201, 204]:  # 201 Created or 204 No Content
+        # Extract the filename from PODCAST_HISTORY_FILE
+        history_filename = os.path.basename(PODCAST_HISTORY_FILE)
         print(f"GitHub Pages enabled for repository {GITHUB_REPO_NAME}.")
-        print(f"Visit your site at: https://{GITHUB_USERNAME}.github.io/{GITHUB_REPO_NAME}/")
+        print(f"Visit your site at: https://{GITHUB_USERNAME}.github.io/{GITHUB_REPO_NAME}/{history_filename}")
     else:
         print(f"Failed to enable GitHub Pages: {response.status_code} - {response.text}")
 
@@ -115,38 +117,6 @@ def create_initial_commit(repo_root):
     subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_root, check=True)
     subprocess.run(["git", "push", "-u", "origin", "main"], cwd=repo_root, check=True)
 
-def commit_files_to_github(repo_name, repo_root, commit_message="Added new podcast files"):
-    """Commit files in a folder to the specified GitHub repository."""
-    
-    # Initialize the git repository if not already done
-    if not os.path.exists(os.path.join(repo_root, ".git")):
-        subprocess.run(["git", "init"], cwd=repo_root, check=True)
-        subprocess.run(["git", "remote", "add", "origin", f"git@github.com:{GITHUB_USERNAME}/{repo_name}.git"], cwd=repo_root, check=True)
-    
-    # Stage the updated podcast_history.html if it has been modified
-    subprocess.run(["git", "add", os.path.relpath(PODCAST_HISTORY_FILE, repo_root)], cwd=repo_root, check=True)
-    
-    # Stage all files within the transcribed folder
-    subprocess.run(["git", "add", "--all", os.path.relpath(TRANSCRIBED_FOLDER, repo_root)], cwd=repo_root, check=True)
-    
-    # Commit the changes if any files are staged
-    commit_result = subprocess.run(["git", "diff", "--cached", "--exit-code"], cwd=repo_root)
-    
-    if commit_result.returncode == 1:  # If there are staged changes
-        subprocess.run(["git", "commit", "-m", commit_message], cwd=repo_root, check=True)
-        subprocess.run(["git", "push", "-u", "origin", "main"], cwd=repo_root, check=True)
-        print(f"Files committed and pushed to GitHub repository '{repo_name}' successfully.")
-        
-        # Optionally delete local files after upload
-        if AUTO_DELETE_AFTER_UPLOAD:
-            for root, dirs, files in os.walk(TRANSCRIBED_FOLDER):
-                for file in files:
-                    os.remove(os.path.join(root, file))
-                for dir in dirs:
-                    shutil.rmtree(os.path.join(root, dir))  # Use shutil.rmtree to ensure non-empty directories are removed
-    else:
-        print("No changes to commit.")
-
 def check_create_github_repo(repo_name):
     """Check if the GitHub repository exists, and create it if not."""
     headers = {
@@ -170,16 +140,139 @@ def check_create_github_repo(repo_name):
         print(f"Repository {repo_name} exists.")
 
 def initialize_local_git_repo(repo_root):
-    """Initialize the local Git repository if not already done."""
-    # Ensure the repo_root directory exists
+    """Initialize the local Git repository with sparse checkout."""
     if not os.path.exists(repo_root):
         os.makedirs(repo_root)
-        
+    
     if not os.path.exists(os.path.join(repo_root, ".git")):
         print(f"Initializing local Git repository in {repo_root}...")
         subprocess.run(["git", "init"], cwd=repo_root, check=True)
         subprocess.run(["git", "remote", "add", "origin", f"git@github.com:{GITHUB_USERNAME}/{GITHUB_REPO_NAME}.git"], cwd=repo_root, check=True)
-        print("Local Git repository initialized and connected to GitHub.")
+        subprocess.run(["git", "config", "core.sparseCheckout", "true"], cwd=repo_root, check=True)
+        
+        with open(os.path.join(repo_root, ".git", "info", "sparse-checkout"), "w") as f:
+            f.write("/*\n")
+            f.write("!/transcribed/\n")
+            f.write("/transcribed/*/\n")
+        
+        # Check if the remote has any commits
+        result = subprocess.run(["git", "ls-remote", "--exit-code", "origin", "main"], cwd=repo_root, capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            # Remote main branch exists, pull it
+            subprocess.run(["git", "pull", "origin", "main"], cwd=repo_root, check=True)
+            print("Pulled existing main branch from remote.")
+        else:
+            # Remote is empty, create initial commit and push
+            with open(os.path.join(repo_root, "README.md"), "w") as f:
+                f.write(f"# {GITHUB_REPO_NAME}\n\nThis repository contains podcast archives.")
+            
+            subprocess.run(["git", "add", "README.md"], cwd=repo_root, check=True)
+            subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_root, check=True)
+            subprocess.run(["git", "branch", "-M", "main"], cwd=repo_root, check=True)
+            subprocess.run(["git", "push", "-u", "origin", "main"], cwd=repo_root, check=True)
+            print("Created and pushed initial commit to main branch.")
+        
+        print("Local Git repository initialized with sparse checkout.")
+    else:
+        print("Git repository already initialized.")
+
+def commit_database_and_html(repo_root, db_path, history_file):
+    """Commit changes to the database and HTML file."""
+    subprocess.run(["git", "add", os.path.relpath(db_path, repo_root)], cwd=repo_root, check=True)
+    subprocess.run(["git", "add", os.path.relpath(history_file, repo_root)], cwd=repo_root, check=True)
+    
+    status = subprocess.run(["git", "status", "--porcelain"], cwd=repo_root, capture_output=True, text=True).stdout
+    if status.strip():
+        subprocess.run(["git", "commit", "-m", "Update database and HTML"], cwd=repo_root, check=True)
+        subprocess.run(["git", "push", "origin", "main"], cwd=repo_root, check=True)
+        print("Database and HTML changes committed and pushed.")
+    else:
+        print("No changes to commit for database and HTML.")
+
+def temporarily_include_transcribed(repo_root):
+    """Temporarily include the transcribed directory in sparse checkout."""
+    sparse_checkout_file = os.path.join(repo_root, ".git", "info", "sparse-checkout")
+    
+    # Backup current sparse-checkout configuration
+    shutil.copy(sparse_checkout_file, f"{sparse_checkout_file}.bak")
+    
+    # Add transcribed/ to sparse-checkout
+    with open(sparse_checkout_file, "a") as f:
+        f.write("transcribed/\n")
+    
+    # Reapply sparse-checkout
+    subprocess.run(["git", "sparse-checkout", "reapply"], cwd=repo_root, check=True)
+
+def revert_sparse_checkout(repo_root):
+    """Revert sparse checkout to original configuration."""
+    sparse_checkout_file = os.path.join(repo_root, ".git", "info", "sparse-checkout")
+    backup_file = f"{sparse_checkout_file}.bak"
+    
+    # Restore original sparse-checkout configuration
+    shutil.move(backup_file, sparse_checkout_file)
+    
+    # Reapply sparse-checkout
+    subprocess.run(["git", "sparse-checkout", "reapply"], cwd=repo_root, check=True)
+
+def commit_new_podcast_files(repo_root, new_files):
+    """Commit new podcast files to GitHub."""
+    print("Starting to commit new podcast files...")
+    try:
+        temporarily_include_transcribed(repo_root)
+        
+        files_to_commit = []
+        for file in new_files:
+            relative_path = os.path.relpath(file, repo_root)
+            full_path = os.path.join(repo_root, relative_path)
+            print(f"Checking file: {full_path}")
+            if os.path.exists(full_path):
+                files_to_commit.append(relative_path)
+                try:
+                    subprocess.run(["git", "add", "--sparse", relative_path], cwd=repo_root, check=True)
+                    print(f"Added file to staging: {relative_path}")
+                except subprocess.CalledProcessError as e:
+                    print(f"Error adding file {relative_path}: {e}")
+            else:
+                print(f"Warning: File {full_path} does not exist and will not be committed.")
+        
+        if files_to_commit:
+            try:
+                subprocess.run(["git", "commit", "-m", "Add new podcast files"], cwd=repo_root, check=True)
+                print("Committed new podcast files.")
+                subprocess.run(["git", "push", "origin", "main"], cwd=repo_root, check=True)
+                print(f"New podcast files committed and pushed: {', '.join(files_to_commit)}")
+                return True
+            except subprocess.CalledProcessError as e:
+                print(f"Error during commit or push: {e}")
+                return False
+        else:
+            print("No new podcast files to commit.")
+            return False
+    except Exception as e:
+        print(f"An unexpected error occurred while committing new podcast files: {e}")
+        return False
+    finally:
+        revert_sparse_checkout(repo_root)
+        print("Reverted sparse checkout configuration.")
+
+def sync_with_github(repo_name, repo_root):
+    """Sync the local repository with GitHub, excluding the transcribed folder."""
+    if os.path.exists(os.path.join(repo_root, ".git")):
+        print(f"Syncing local repository {repo_name} with GitHub...")
+        subprocess.run(["git", "pull", "--sparse-checkout"], cwd=repo_root, check=True)
+    else:
+        print(f"Cloning {repo_name} from GitHub with sparse-checkout...")
+        subprocess.run(["git", "clone", "--filter=blob:none", "--sparse", f"git@github.com:{GITHUB_USERNAME}/{repo_name}.git", repo_root], check=True)
+        subprocess.run(["git", "sparse-checkout", "set", "!", "transcribed"], cwd=repo_root, check=True)
+
+def cleanup_local_files(files_to_clean):
+    for file in files_to_clean:
+        try:
+            os.remove(file)
+            print(f"Removed local file: {file}")
+        except OSError as e:
+            print(f"Error removing file {file}: {e}")
 
 def install_sqlite_with_brew():
     """Install SQLite using Homebrew if not installed."""
@@ -213,7 +306,7 @@ def add_podcast_to_db(db_path, metadata, file_name, transcript_name):
     cursor = conn.cursor()
 
     # Construct the GitHub URLs
-    mp3_github_url = f"https://raw.githubusercontent.com/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/main/transcribed/{normalize_folder_name(metadata['title'])}/{file_name}"
+    mp3_github_url = f"https://media.githubusercontent.com/media/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/main/transcribed/{normalize_folder_name(metadata['title'])}/{file_name}"
     transcript_github_url = f"https://raw.githubusercontent.com/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/main/transcribed/{normalize_folder_name(metadata['title'])}/{transcript_name}"
     
     cursor.execute('''INSERT INTO podcasts (title, pubDate, guid, link, file_name, transcript_name) 
@@ -246,30 +339,23 @@ def normalize_folder_name(title):
     """Normalize folder names by replacing spaces with underscores."""
     return re.sub(r'[^\w\s-]', '', title).replace(" ", "_").strip("_")
 
-def organize_and_commit_podcast_files(title, mp3_file, transcript_file):
-    """Organize podcast files into folders and commit to GitHub."""
+def organize_podcast_files(title, mp3_file, transcript_file):
+    """Organize podcast files into folders without committing."""
     normalized_title = normalize_folder_name(title)
     podcast_folder = os.path.join(TRANSCRIBED_FOLDER, normalized_title)
     
-    if os.path.exists(podcast_folder) and os.listdir(podcast_folder):
-        print(f"Warning: Directory not empty: {podcast_folder}")
-    else:
+    if not os.path.exists(podcast_folder):
         os.makedirs(podcast_folder, exist_ok=True)
     
-    # Move the MP3 file to the transcribed folder if UPLOAD_MP3_FILES is True
     if UPLOAD_MP3_FILES:
         mp3_dest = os.path.join(podcast_folder, os.path.basename(mp3_file))
-        os.rename(mp3_file, mp3_dest)
+        shutil.move(mp3_file, mp3_dest)
     else:
         if AUTO_DELETE_MP3:
             os.remove(mp3_file)
     
-    # Move the transcript file to the transcribed folder
     transcript_dest = os.path.join(podcast_folder, os.path.basename(transcript_file))
-    os.rename(transcript_file, transcript_dest)
-    
-    if ENABLE_GITHUB_COMMIT:
-        commit_files_to_github(GITHUB_REPO_NAME, REPO_ROOT)
+    shutil.move(transcript_file, transcript_dest)
 
 def download_file(url, folder, title):
     """Download the file from the URL and save it to the folder with a readable filename."""
@@ -425,7 +511,7 @@ def save_downloaded_url(history_file, metadata, file_name, transcript_name):
     transcript_name = os.path.basename(transcript_name)
     
     # Construct the GitHub URLs
-    mp3_github_url = f"https://raw.githubusercontent.com/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/main/transcribed/{normalized_title}/{file_name}"
+    mp3_github_url = f"https://media.githubusercontent.com/media/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/main/transcribed/{normalized_title}/{file_name}"
     transcript_github_url = f"https://raw.githubusercontent.com/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/main/transcribed/{normalized_title}/{transcript_name}"
     
     entry = f"""
@@ -433,7 +519,7 @@ def save_downloaded_url(history_file, metadata, file_name, transcript_name):
     <td><a href="{html.escape(metadata['guid'])}" target="_blank">{html.escape(metadata['title'])}</a></td>
     <td>{html.escape(format_date(metadata['pubDate']))}</td>
     <td><a href="{transcript_github_url}" target="_blank">Download Transcript</a></td>
-    <td><a href="{mp3_github_url}" target="_blank">Download Audio</a></td>
+    <td><a href="{mp3_github_url}">Press <strong>Option</strong> (Mac) to d/l</a></td>
     <td><audio src="{mp3_github_url}" controls></audio></td>
     <td><a href="{html.escape(metadata['link'])}" target="_blank">Pod Site</a></td>
 </tr>
@@ -446,7 +532,12 @@ def update_html_links(history_file):
     with open(history_file, 'r+') as f:
         content = f.read()
         content = re.sub(
-            r'file://[^"]+',
+            r'file://[^"]+\.mp3',
+            lambda match: match.group(0).replace('file://', f"https://media.githubusercontent.com/media/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/main/transcribed/"),
+            content
+        )
+        content = re.sub(
+            r'file://[^"]+\.txt',
             lambda match: match.group(0).replace('file://', f"https://raw.githubusercontent.com/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/main/transcribed/"),
             content
         )
@@ -479,12 +570,12 @@ def process_feed(feed_url, download_folder, history_file, db_path, debug=True):
     response.raise_for_status()
 
     root = ET.fromstring(response.content)
-    downloaded_urls = load_downloaded_urls(history_file)
-    
-    if debug:
-        print(f"Downloaded URLs: {downloaded_urls}")
 
-    downloaded_files = []
+    # Connect to the database
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    new_files = []
 
     for item in root.findall('./channel/item')[:DEBUG_MODE_LIMIT]:
         title = item.find('title').text
@@ -499,7 +590,11 @@ def process_feed(feed_url, download_folder, history_file, db_path, debug=True):
                 if debug:
                     print(f"Enclosure URL found: {mp3_url}")
                 
-                if mp3_url not in downloaded_urls:
+                # Check if this URL is already in the database
+                cursor.execute("SELECT COUNT(1) FROM podcasts WHERE file_name = ?", (mp3_url,))
+                already_processed = cursor.fetchone()[0] > 0
+                
+                if not already_processed:
                     if debug:
                         print(f"New file found: {mp3_url}")
                     
@@ -517,27 +612,55 @@ def process_feed(feed_url, download_folder, history_file, db_path, debug=True):
                         if debug:
                             print(f"Downloaded, transcribed, and saved: {mp3_url} as {filename} with transcript {transcript_file}")
                         
-                        downloaded_files.append(local_filename)
-                        organize_and_commit_podcast_files(title, local_filename, transcript_file)
+                        new_files.extend([local_filename, transcript_file])
+                        organize_podcast_files(title, local_filename, transcript_file)
                         
                     except Exception as e:
                         if debug:
-                            print(f"Failed to download {mp3_url}: {e}")
+                            print(f"Failed to process {mp3_url}: {e}")
                 else:
                     if debug:
-                        print(f"File already downloaded: {mp3_url}")
+                        print(f"File already processed: {mp3_url}")
         else:
             if debug:
                 print(f"No enclosure found for {title}")
-    
-    if downloaded_files:
+
+    # Close the database connection
+    conn.close()
+
+    upload_successful = False
+    if new_files:
         generate_html_from_db(db_path, history_file)
         if UPDATE_HTML_LINKS:
             update_html_links(history_file)
         if ENABLE_GITHUB_COMMIT:
-            commit_files_to_github(GITHUB_REPO_NAME, REPO_ROOT)
+            commit_database_and_html(REPO_ROOT, DB_PATH, PODCAST_HISTORY_FILE)
+            upload_successful = commit_new_podcast_files(REPO_ROOT, new_files)
         if ENABLE_GITHUB_PAGES:
             enable_github_pages()
+
+    if upload_successful:
+        for file in new_files:
+            if os.path.exists(file):
+                os.remove(file)
+        print("Local files deleted after successful upload.")
+    else:
+        print("Upload was not successful. Local files were not deleted.")
+
+    # Cleanup any remaining files in the transcribed directory
+    transcribed_dir = os.path.join(REPO_ROOT, "transcribed")
+    if os.path.exists(transcribed_dir):
+        for root, dirs, files in os.walk(transcribed_dir):
+            for file in files:
+                os.remove(os.path.join(root, file))
+            for dir in dirs:
+                shutil.rmtree(os.path.join(root, dir))
+        print("Cleaned up remaining files in the transcribed directory.")
+    else:
+        print("Transcribed directory does not exist. No cleanup needed.")
+
+    if debug:
+        print("Feed processing completed.")
 
 if __name__ == "__main__":
     check_git_installed()
@@ -553,4 +676,10 @@ if __name__ == "__main__":
 
     initialize_local_git_repo(REPO_ROOT)
     setup_database(DB_PATH)
-    process_feed(RSS_FEED_URL, PODCAST_AUDIO_FOLDER, PODCAST_HISTORY_FILE, DB_PATH, debug=True)
+    
+    try:
+        process_feed(RSS_FEED_URL, PODCAST_AUDIO_FOLDER, PODCAST_HISTORY_FILE, DB_PATH, debug=True)
+        print("Script completed successfully.")
+    except Exception as e:
+        print(f"An error occurred during processing: {e}")
+        print("The script did not complete successfully. Local files may not have been uploaded or deleted.")
