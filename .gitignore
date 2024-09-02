@@ -1,5 +1,7 @@
+__pycache__
+get_config.py
+cleanup.sh
+config.py
 uv.lock
 pyproject.toml
 podscriber.py
-__pycache__
-config.py
