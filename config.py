@@ -20,10 +20,10 @@ GITHUB_USERNAME = "YOUR_GITHUB_USERNAME" # GitHub username for the repository wh
 GITHUB_TOKEN = "YOUR_GITHUB_TOKEN" # GitHub token for authentication; generate it from your GitHub account
 GITHUB_REPO_CHECK = True # Set to True to check and create the GitHub repository if it doesn't exist
 GITHUB_REPO_NAME = "podcast-archives" # The name of the GitHub repository where podcast files will be stored
-AUTO_DELETE_AFTER_UPLOAD = True  # Set to True to automatically delete files in TRANSCRIBED_FOLDER after uploading to GitHub
+# AUTO_DELETE_AFTER_UPLOAD = True  # Set to True to automatically delete files in TRANSCRIBED_FOLDER after uploading to GitHub
 GITHUB_REPO_PRIVATE = False  # Set to True to create a private repository, False to create a public one
 ENABLE_GITHUB_COMMIT = True # Set to True to enable committing transcribed text files to GITHUB_REPO_NAME
-UPLOAD_MP3_FILES = True # Set to True to upload MP3 files to GITHUB_REPO_NAME (in addition to the transcripts)
+# UPLOAD_MP3_FILES = True # Set to True to upload MP3 files to GITHUB_REPO_NAME (in addition to the transcripts)
 UPDATE_HTML_LINKS = True # Set to True to update HTML links in the PODCAST_HISTORY_FILE to point to GitHub URLs
 ENABLE_GITHUB_PAGES = True # Set to True to enable GitHub Pages automatically after processing
 
