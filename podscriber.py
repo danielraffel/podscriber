@@ -8,7 +8,6 @@ import subprocess
 import shutil
 import hashlib
 import chromadb
-from chromadb.config import Settings
 
 from config import (
     RSS_FEED_URL, PODCAST_AUDIO_FOLDER, PODCAST_HISTORY_FILE, WHISPER_MODEL_PATH,
@@ -16,7 +15,7 @@ from config import (
     GITHUB_REPO_NAME, ENABLE_GITHUB_COMMIT, UPDATE_HTML_LINKS,
     GITHUB_USERNAME, GITHUB_TOKEN, GITHUB_REPO_PRIVATE, DEBUG_MODE_LIMIT, 
     REPO_ROOT, ENABLE_GITHUB_PAGES,
-    WHISPER_SETUP, WHISPER_ROOT
+    WHISPER_SETUP, WHISPER_ROOT,CHROMADB_DB_PATH
 )
 
 # Configuration and Constants
@@ -24,10 +23,19 @@ REPO_ROOT = os.path.expanduser(REPO_ROOT)
 PODCAST_AUDIO_FOLDER = os.path.expanduser(PODCAST_AUDIO_FOLDER)
 PODCAST_HISTORY_FILE = os.path.expanduser(PODCAST_HISTORY_FILE)
 TRANSCRIBED_FOLDER = os.path.join(REPO_ROOT, "transcribed")
+CHROMADB_DB_PATH = os.path.expanduser(CHROMADB_DB_PATH)
 
-# Initialize ChromaDB client and collection
-chroma_client = chromadb.Client(Settings())
-podcast_collection = chroma_client.create_collection("podcasts")
+# Setup ChromaDB Persistent Client
+client = chromadb.PersistentClient(path=CHROMADB_DB_PATH)
+
+# Access the podcasts collection
+podcast_collection = client.get_or_create_collection(name="podcasts")
+
+# Check the heartbeat to ensure connection
+client.heartbeat()
+
+# Example usage of resetting the database if necessary (destructive)
+# client.reset()
 
 def check_git_installed():
     """Ensure git is installed on the system."""
@@ -179,36 +187,47 @@ def update_readme_with_archive_link(repo_root, archive_url):
     subprocess.run(["git", "push", "origin", "main"], cwd=repo_root, check=True)
 
 def commit_database_and_files(repo_root, db_path, history_file, new_files):
-    """Commit changes to the database, HTML file, and new podcast files."""
+    """Commit changes to the database directory, HTML file, and new podcast files."""
     if not os.path.exists(history_file):
         print(f"Error: {history_file} does not exist.")
-        return
+        return False
+
+    if db_path and not os.path.exists(db_path):
+        print(f"Error: Database path {db_path} does not exist.")
+        return False
 
     try:
+        # Stash any local changes before pulling
+        subprocess.run(["git", "stash"], cwd=repo_root, check=True)
+        subprocess.run(["git", "pull", "--rebase", "origin", "main"], cwd=repo_root, check=True)
+        subprocess.run(["git", "stash", "pop"], cwd=repo_root, check=True)
+
+        # Stage the entire ChromaDB database directory
+        if db_path:
+            subprocess.run(["git", "add", os.path.relpath(db_path, repo_root)], cwd=repo_root, check=True)
+
         # Stage the HTML file and transcribed folder
         subprocess.run(["git", "add", os.path.relpath(history_file, repo_root)], cwd=repo_root, check=True)
         
-        # Add the entire transcribed folder to staging
         if os.path.exists(TRANSCRIBED_FOLDER):
             subprocess.run(["git", "add", os.path.relpath(TRANSCRIBED_FOLDER, repo_root)], cwd=repo_root, check=True)
         
         # Stage new podcast files (if any)
         for file in new_files:
-            subprocess.run(["git", "add", os.path.relpath(file, repo_root)], cwd=repo_root, check=True)
-        
+            if os.path.exists(file):
+                subprocess.run(["git", "add", os.path.relpath(file, repo_root)], cwd=repo_root, check=True)
+            else:
+                print(f"Warning: File {file} does not exist and will not be committed.")
+
         # Check if there are any changes to commit
         status = subprocess.run(["git", "status", "--porcelain"], cwd=repo_root, capture_output=True, text=True).stdout
         if status.strip():
-            subprocess.run(["git", "commit", "-m", "Update HTML and podcast files"], cwd=repo_root, check=True)
-
-            # Pull changes from the remote before pushing
-            subprocess.run(["git", "pull", "--rebase", "origin", "main"], cwd=repo_root, check=True)
-
+            subprocess.run(["git", "commit", "-m", "Update database, HTML, and podcast files"], cwd=repo_root, check=True)
             subprocess.run(["git", "push", "origin", "main"], cwd=repo_root, check=True)
-            print("HTML and podcast files committed and pushed.")
+            print("Database, HTML, and podcast files committed and pushed.")
             return True
         else:
-            print("No changes to commit for HTML or podcast files.")
+            print("No changes to commit for the database, HTML, or podcast files.")
             return False
 
     except subprocess.CalledProcessError as e:
@@ -239,10 +258,14 @@ def generate_html_from_chroma_db(history_file):
         query_texts=[""],  # Empty query to retrieve all documents
         n_results=1000     # Assume a large enough number to get all results
     )
-    
-    documents = results['documents'][0]
-    ids = results['ids'][0]
-    metadatas = results.get('metadatas', [{}])[0]  # Ensure we retrieve metadata
+
+    if 'documents' in results and len(results['documents']) > 0:
+        documents = results['documents'][0]
+        ids = results['ids'][0]
+        metadatas = results.get('metadatas', [{}])[0]
+    else:
+        print("No documents found in ChromaDB.")
+        return
 
     print(f"Found {len(documents)} podcast entries in ChromaDB.")
     
@@ -259,7 +282,6 @@ def generate_html_from_chroma_db(history_file):
     end_html_log(history_file)
     print(f"HTML generation complete: {history_file}")
 
-# Feed Processing with ChromaDB
 def process_feed(feed_url, download_folder, history_file, debug=True):
     """Process the RSS feed, download new MP3 files, transcribe them, and store data in ChromaDB."""
     if debug:
@@ -309,37 +331,49 @@ def process_feed(feed_url, download_folder, history_file, debug=True):
                 
                 # Retrieve all documents and filter by 'guid'
                 existing_docs = podcast_collection.get()
-                already_processed = any(doc['metadata']['guid'] == guid for doc in existing_docs['documents'])
-                
-                if not already_processed:
-                    if debug:
-                        print(f"New file found: {mp3_url}")
-                    
-                    try:
-                        mp3_file_path, filename = download_file(mp3_url, download_folder, full_title)
-                        transcript_file, transcript_text = transcribe_with_whisper(mp3_file_path, metadata)
-                        
-                        # Organize the transcript file and get the new path
-                        new_transcript_path = organize_podcast_files(podcast_name, episode_title, transcript_file)
 
-                        # Update new_files list with the correct path
-                        new_files.append(new_transcript_path)
+                # Debugging: Print out existing_docs to understand its structure
+                print(f"Existing documents retrieved from ChromaDB: {existing_docs}")
 
-                        if debug:
-                            print(f"Organized file: Transcript={new_transcript_path}")
-                        
-                        # Save podcast metadata into the ChromaDB, including transcript text
-                        add_podcast_to_db_chroma(metadata, mp3_url, os.path.basename(new_transcript_path), transcript_text)
-
-                        if debug:
-                            print(f"Downloaded, transcribed, and saved: {mp3_url} as {filename} with transcript {new_transcript_path}")
-                        
-                    except Exception as e:
-                        if debug:
-                            print(f"Failed to process {mp3_url}: {e}")
+                # Ensure 'documents' and 'metadatas' exist in the structure
+                if 'documents' in existing_docs and 'metadatas' in existing_docs:
+                    # Iterate over each document and its corresponding metadata
+                    already_processed = False
+                    for doc_metadata in existing_docs['metadatas']:
+                        if doc_metadata.get('guid') == guid:
+                            already_processed = True
+                            break
                 else:
+                    print(f"Unexpected structure of existing_docs: {existing_docs}")
+                    already_processed = False
+
+                if already_processed:
                     if debug:
                         print(f"File already processed: {mp3_url}")
+                    continue
+
+                try:
+                    mp3_file_path, filename = download_file(mp3_url, download_folder, full_title)
+                    transcript_file, transcript_text = transcribe_with_whisper(mp3_file_path, metadata)
+                    
+                    # Organize the transcript file and get the new path
+                    new_transcript_path = organize_podcast_files(podcast_name, episode_title, transcript_file)
+
+                    # Update new_files list with the correct path
+                    new_files.append(new_transcript_path)
+
+                    if debug:
+                        print(f"Organized file: Transcript={new_transcript_path}")
+                    
+                    # Save podcast metadata into the ChromaDB, including transcript text
+                    add_podcast_to_db_chroma(metadata, mp3_url, os.path.basename(new_transcript_path), transcript_text)
+
+                    if debug:
+                        print(f"Downloaded, transcribed, and saved: {mp3_url} as {filename} with transcript {new_transcript_path}")
+                    
+                except Exception as e:
+                    if debug:
+                        print(f"Failed to process {mp3_url}: {e}")
         else:
             if debug:
                 print(f"No enclosure found for {full_title}")
@@ -350,6 +384,8 @@ def process_feed(feed_url, download_folder, history_file, debug=True):
         generate_html_from_chroma_db(history_file)
     else:
         print("No new podcasts found, skipping HTML generation.")
+
+
 
 # Utilities and File Operations
 # def extract_podcast_and_episode(title):
@@ -695,32 +731,30 @@ if __name__ == "__main__":
         print("RSS feed processing completed.")
         
         if ENABLE_GITHUB_COMMIT:
-            upload_successful = commit_database_and_files(REPO_ROOT, None, PODCAST_HISTORY_FILE, new_files)
+            upload_successful = commit_database_and_files(REPO_ROOT, CHROMADB_DB_PATH, PODCAST_HISTORY_FILE, new_files)
             if upload_successful:
                 print("Files successfully uploaded to GitHub.")
-                
-                # Clean up: remove the original MP3 and WAV files only after successful upload
-                for file_path in new_files:
-                    base_file = os.path.join(PODCAST_AUDIO_FOLDER, os.path.basename(file_path).replace(".txt", ".mp3"))
-                    wav_file = base_file.replace(".mp3", ".wav")
-                    if os.path.exists(base_file):
-                        os.remove(base_file)
-                        print(f"Deleted file: {base_file}")
-                    if os.path.exists(wav_file):
-                        os.remove(wav_file)
-                        print(f"Deleted file: {wav_file}")
-                    
             else:
                 print("No changes to upload to GitHub.")
-        
-        subprocess.run(["git", "fetch", "origin"], cwd=REPO_ROOT, check=True)
-        subprocess.run(["git", "reset", "--hard", "origin/main"], cwd=REPO_ROOT, check=True)
-        print("Final fetch and reset to sync with remote completed.")
+   
+    finally:
+        # Always attempt to delete MP3 and WAV files after processing
+        for file_path in new_files:
+            base_file = os.path.join(PODCAST_AUDIO_FOLDER, os.path.basename(file_path).replace(".txt", ".mp3"))
+            wav_file = base_file.replace(".mp3", ".wav")
+            if os.path.exists(base_file):
+                os.remove(base_file)
+                print(f"Deleted file: {base_file}")
+            if os.path.exists(wav_file):
+                os.remove(wav_file)
+                print(f"Deleted file: {wav_file}")
 
-        if ENABLE_GITHUB_PAGES:
-            enable_github_pages()
-            print("GitHub Pages enabled.")
+    subprocess.run(["git", "fetch", "origin"], cwd=REPO_ROOT, check=True)
+    subprocess.run(["git", "reset", "--hard", "origin/main"], cwd=REPO_ROOT, check=True)
+    print("Final fetch and reset to sync with remote completed.")
 
-        print("Script completed successfully.")
-    except Exception as e:
-        print(f"An error occurred during processing: {e}")
+    if ENABLE_GITHUB_PAGES:
+        enable_github_pages()
+        print("GitHub Pages enabled.")
+
+    print("Script completed successfully.")
