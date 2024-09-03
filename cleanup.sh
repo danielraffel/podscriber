@@ -20,8 +20,11 @@ echo "Resolved PODCAST_HISTORY_FILE: $PODCAST_HISTORY_FILE"
 echo "Deleting ${REPO_ROOT}.git"
 rm -rf "${REPO_ROOT}.git"
 
-echo "Deleting ${REPO_ROOT}podcasts.db"
-rm -f "${REPO_ROOT}podcasts.db"
+# echo "Deleting ${REPO_ROOT}podcasts.db"
+# rm -f "${REPO_ROOT}podcasts.db"
+
+echo "Deleting all files and directories within ${CHROMADB_DB_PATH}"
+rm -rf "${CHROMADB_DB_PATH:?}/"*
 
 echo "Deleting $PODCAST_HISTORY_FILE"
 rm -f "$PODCAST_HISTORY_FILE"
