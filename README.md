@@ -97,25 +97,21 @@ This cron job will execute `podscriber.py` every day at 2 AM.
 
 ## Development and Debugging with `cleanup.sh`
 
-For development or debugging purposes, `podscriber` includes a script named `cleanup.sh` that allows you to reset your environment by removing all generated files and directories, as well as deleting the associated GitHub repository. This can be particularly useful if you want to run the script from scratch, ensuring a clean slate each time.
+For development or debugging, `podscriber` includes a `cleanup.sh` script that resets your environment by removing generated files, directories, and the associated GitHub repository. This ensures a clean slate each time you run the script.
 
 ### What `cleanup.sh` Does
 
 The `cleanup.sh` script performs the following actions:
 
-1. **Removes Local Git Repository**: Deletes the `.git` directory within your local `podscriber` repository, effectively removing all version control history.
+1. **Removes Local Git Repository**: Deletes the `.git` directory, removing all version control history.
+2. **Deletes ChromaDB Database**: Clears all files and directories within your ChromaDB path.
+3. **Clears Audio and Transcript Files**: Deletes all podcast audio files and transcriptions.
+4. **Deletes Podcast History File**: Removes the history file tracking processed podcasts.
+5. **Deletes GitHub Repository**: If it exists, deletes the associated GitHub repository (requires appropriate token permissions).
 
-2. **Deletes ChromaDB Database**: Deletes all files and directories within your ChromaDB path effectively nuking your DB and files.
+### Running `cleanup.sh`
 
-3. **Clears Audio and Transcript Files**: Deletes all downloaded podcast audio files and their corresponding transcriptions from the designated folders.
-
-4. **Deletes HTML Archive**: Removes the HTML file that serves as the archive for your podcast transcriptions.
-
-5. **Deletes the GitHub Repository**: If the GitHub repository associated with `podscriber` exists, the script will delete it. This requires your GitHub token to have the necessary permissions to delete repositories.
-
-### How to Run `cleanup.sh`
-
-Running the `cleanup.sh` script is straightforward:
+To execute the script:
 
 1. Navigate to the `podscriber` directory:
 
@@ -123,11 +119,23 @@ Running the `cleanup.sh` script is straightforward:
    cd ~/podscriber
    ```
 
-2. Execute the script manually:
+2. Run the script:
 
    ```bash
    ./cleanup.sh
    ```
+
+### Flags and Options
+
+You can customize the cleanup by using flags to skip specific actions:
+
+- `--no-delete-chromadb` : Skip deleting the ChromaDB database.
+- `--no-delete-git` : Skip deleting the `.git` directory.
+- `--no-delete-history` : Skip deleting the podcast history file.
+- `--no-delete-audio` : Skip deleting audio files.
+- `--no-delete-transcribed` : Skip deleting transcription files.
+- `--no-delete-repo` : Skip deleting the GitHub repository.
+- `-h, --help` : Display help information.
 
 ### Important Notes
 
