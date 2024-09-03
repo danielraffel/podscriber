@@ -1,6 +1,6 @@
 # Podscriber
 
-`podscriber` is a Python-based tool, currently optimized for macOS, that downloads podcast episodes, transcribes them using Whisper, and generates an HTML archive of your listening history. This archive is hosted on GitHub pages, with each episode linked to its transcript, allowing you to revisit and search through both the audio and text of what you've listened to.
+`podscriber` is a Python-based tool, currently optimized for macOS, that downloads podcast episodes, transcribes them using Whisper, stores metadata in ChromaDB, and generates an HTML archive of your listening history. This archive is hosted on GitHub Pages, with each episode linked to its transcript, allowing you to revisit and search through both the audio and text of what you've listened to.
 
 ## Prerequisites
 
@@ -10,16 +10,11 @@ Before running `podscriber`, ensure you have the following installed:
 - **Git**: Required for committing files to a GitHub repository.
 - **Python**: Although `uv` can install and manage Python versions, having Python pre-installed can streamline the setup.
 
-Be aware that if you do not have these installed `podscriber` will install them at run-time:
+Be aware that if you do not have these installed `podscriber` **will** install them at run-time **without asking**:
 - **Brew**: Needed for installing SQLite and Git LFS.
-- **SQLite**: Required for managing a DB with your up-to-date podcast episodes, transcripts, media files and for generating a browsable HTML archive.
-- **Git LFS**: Required for committing large files (MP3/WAV) to a GitHub repository.
-- **Whisper**: A speech-to-text model that `podscriber` uses to transcribe podcast audio.
+- **Whisper**: A speech-to-text model that `podscriber` uses to transcribe podcast audio (if missing will use [WhisperSetup](https://github.com/danielraffel/WhisperSetup))
 - **ffmpeg**: Needed for converting audio files during the transcription process.
-
-### Whisper Setup
-
-[WhisperSetup](https://github.com/danielraffel/WhisperSetup) is a streamlined script designed to quickly set up and compile `whisper.cpp`, enabling high-performance speech-to-text transcription on macOS, optimized for Apple Silicon so you can run the transcription locally. `podscriber` will automatically use this script to guide you through setting up Whisper if it detects that it’s not already installed.
+- **ChromaDB**: Used to store and manage podcast metadata and transcripts.
 
 ## Installation
 
@@ -100,8 +95,48 @@ To keep your podcast downloads and transcriptions up to date, you might want to 
 
 This cron job will execute `podscriber.py` every day at 2 AM.
 
-## To-Do: Explain overcast-podcast-activity-feed integration
+## Development and Debugging with `cleanup.sh`
 
+For development or debugging purposes, `podscriber` includes a script named `cleanup.sh` that allows you to reset your environment by removing all generated files and directories, as well as deleting the associated GitHub repository. This can be particularly useful if you want to run the script from scratch, ensuring a clean slate each time.
+
+### What `cleanup.sh` Does
+
+The `cleanup.sh` script performs the following actions:
+
+1. **Removes Local Git Repository**: Deletes the `.git` directory within your local `podscriber` repository, effectively removing all version control history.
+
+2. **Deletes Podcast Database**: Removes the `podcasts.db` file, which stores the metadata and other information related to your podcast episodes.
+
+3. **Clears Audio and Transcript Files**: Deletes all downloaded podcast audio files and their corresponding transcriptions from the designated folders.
+
+4. **Deletes HTML Archive**: Removes the HTML file that serves as the archive for your podcast transcriptions.
+
+5. **Deletes the GitHub Repository**: If the GitHub repository associated with `podscriber` exists, the script will delete it. This requires your GitHub token to have the necessary permissions to delete repositories.
+
+### How to Run `cleanup.sh`
+
+Running the `cleanup.sh` script is straightforward:
+
+1. Navigate to the `podscriber` directory:
+
+   ```bash
+   cd ~/podscriber
+   ```
+
+2. Execute the script manually:
+
+   ```bash
+   ./cleanup.sh
+   ```
+
+### Important Notes
+
+- **Manual Execution**: This script is designed to be run manually, giving you full control over when you want to reset your environment.
+- **GitHub Token Permissions**: Ensure that your GitHub token has the appropriate permissions to delete repositories. Without this, the script will not be able to remove the repository from GitHub.
+
+This script is a powerful tool for developers working on `podscriber`, as it allows you to start fresh with each test run or debugging session, ensuring that no residual data or configurations affect your results.
+
+## To-Do: Explain overcast-podcast-activity-feed integration
 Perhaps I'll get around to explaining how I’m integrating this with [overcast-podcast-activity-feed](https://github.com/dblume/overcast-podcast-activity-feed). In the interim, I’ve made some modifications to [overcast.py](https://github.com/dblume/overcast-podcast-activity-feed/blob/main/overcast.py) to expose MP3 files using the `enclosure_url`. You can view the updated sections in this [gist](https://gist.github.com/danielraffel/5b981fdb72bbf96b28dc3f87fab1c81f). This allows me to access the podcast audio files I've listened to in Overcast and process them with Whisper. Here are the specific changes:
 
 ```python
