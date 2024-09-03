@@ -142,8 +142,6 @@ You can customize the cleanup by using flags to skip specific actions:
 - **Manual Execution**: This script is designed to be run manually, giving you full control over when you want to reset your environment.
 - **GitHub Token Permissions**: Ensure that your GitHub token has the appropriate permissions to delete repositories. Without this, the script will not be able to remove the repository from GitHub.
 
-This script is a powerful tool for developers working on `podscriber`, as it allows you to start fresh with each test run or debugging session, ensuring that no residual data or configurations affect your results.
-
 ## To-Do: Explain overcast-podcast-activity-feed integration
 Perhaps I'll get around to explaining how I’m integrating this with [overcast-podcast-activity-feed](https://github.com/dblume/overcast-podcast-activity-feed). In the interim, I’ve made some modifications to [overcast.py](https://github.com/dblume/overcast-podcast-activity-feed/blob/main/overcast.py) to expose MP3 files using the `enclosure_url`. You can view the updated sections in this [gist](https://gist.github.com/danielraffel/5b981fdb72bbf96b28dc3f87fab1c81f). This allows me to access the podcast audio files I've listened to in Overcast and process them with Whisper. Here are the specific changes:
 
