@@ -105,7 +105,7 @@ The `cleanup.sh` script performs the following actions:
 
 1. **Removes Local Git Repository**: Deletes the `.git` directory within your local `podscriber` repository, effectively removing all version control history.
 
-2. **Deletes Podcast Database**: Removes the `podcasts.db` file, which stores the metadata and other information related to your podcast episodes.
+2. **Deletes ChromaDB Database**: Deletes all files and directories within your ChromaDB path effectively nuking your DB and files.
 
 3. **Clears Audio and Transcript Files**: Deletes all downloaded podcast audio files and their corresponding transcriptions from the designated folders.
 
