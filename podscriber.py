@@ -186,6 +186,30 @@ def update_readme_with_archive_link(repo_root, archive_url):
     subprocess.run(["git", "commit", "-m", "Update README.md with podcast archive link"], cwd=repo_root, check=True)
     subprocess.run(["git", "push", "origin", "main"], cwd=repo_root, check=True)
 
+def file_hash(filepath):
+    """Calculate the SHA-256 hash of the given file."""
+    sha256 = hashlib.sha256()
+    with open(filepath, 'rb') as f:
+        for block in iter(lambda: f.read(4096), b''):
+            sha256.update(block)
+    return sha256.hexdigest()
+
+def pull_github_file(repo_name, filepath, destination):
+    """Pull a file from GitHub and save it locally."""
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3.raw"
+    }
+    url = f"https://raw.githubusercontent.com/{GITHUB_USERNAME}/{repo_name}/main/{filepath}"
+    
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    
+    with open(destination, 'wb') as f:
+        f.write(response.content)
+    
+    print(f"Pulled {filepath} from GitHub and saved to {destination}.")
+
 def commit_database_and_files(repo_root, db_path, history_file, new_files):
     """Commit changes to the database directory, HTML file, and new podcast files."""
     if not os.path.exists(history_file):
@@ -281,6 +305,56 @@ def generate_html_from_chroma_db(history_file):
     # End the HTML log properly
     end_html_log(history_file)
     print(f"HTML generation complete: {history_file}")
+
+def generate_chroma_hashes(db_path, hash_file):
+    """Generate SHA-256 hashes for all files in the ChromaDB directory and save them."""
+    hashes = []
+    for root, dirs, files in os.walk(db_path):
+        for file in files:
+            file_path = os.path.join(root, file)
+            file_rel_path = os.path.relpath(file_path, db_path)
+            file_hash_value = file_hash(file_path)
+            hashes.append(f"{file_rel_path}:{file_hash_value}")
+    
+    with open(hash_file, 'w') as f:
+        f.write("\n".join(hashes))
+
+def compare_chroma_hashes(local_hash_file, remote_hash_file):
+    """Compare local and remote hash files to determine if pulling is necessary."""
+    with open(local_hash_file, 'r') as f:
+        local_hashes = set(f.readlines())
+    
+    with open(remote_hash_file, 'r') as f:
+        remote_hashes = set(f.readlines())
+    
+    if local_hashes == remote_hashes:
+        print("Local ChromaDB files are up-to-date.")
+        return True
+    else:
+        print("Local ChromaDB files differ from remote. Pulling latest from GitHub...")
+        return False
+
+def pull_and_sync_chromadb_if_necessary(repo_name, db_path, hash_file, remote_db_dir):
+    """Check if sync is necessary by comparing local and remote hashes."""
+    remote_hash_file = os.path.join(db_path, 'remote_chroma_hashes.txt')
+
+    # Check if the remote hash file exists
+    try:
+        pull_github_file(repo_name, os.path.basename(hash_file), remote_hash_file)
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            print(f"Remote hash file does not exist. Skipping sync.")
+            return
+        else:
+            raise  # Re-raise the error if it's not a 404
+
+    # If the file was found, proceed with the comparison
+    if compare_chroma_hashes(hash_file, remote_hash_file):
+        print("No sync needed.")
+    else:
+        check_and_sync_chromadb(repo_name, db_path, remote_db_dir)
+    
+    os.remove(remote_hash_file)  # Clean up the temporary remote hash file
 
 def process_feed(feed_url, download_folder, history_file, debug=True):
     """Process the RSS feed, download new MP3 files, transcribe them, and store data in ChromaDB."""
@@ -385,29 +459,7 @@ def process_feed(feed_url, download_folder, history_file, debug=True):
     else:
         print("No new podcasts found, skipping HTML generation.")
 
-
-
-# Utilities and File Operations
-# def extract_podcast_and_episode(title):
-#     # Log the title before processing
-#     print(f"Processing title: {title}")
-    
-#     # Split the title into parts based on colon
-#     parts = title.split(": ", 2)  # Split only on the first two colons
-    
-#     if len(parts) == 3:
-#         podcast_name = parts[0].strip()  # The first part before the first colon
-#         episode_title = f"{parts[1].strip()}: {parts[2].strip()}"  # Combine the rest as the episode title
-#     else:
-#         # Fallback for unexpected formats, use the entire title as both name and title
-#         podcast_name = title.strip()
-#         episode_title = "Unknown Episode"
-    
-#     # Log the results after processing
-#     print(f"Extracted podcast_name: {podcast_name}, episode_title: {episode_title}")
-    
-#     return podcast_name, episode_title
-
+# Date and Name Formatting Functions
 def format_date_long(date_str):
     """Format the date to 'Month Day, Year' for TXT files."""
     date_obj = datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S %z")
@@ -717,14 +769,12 @@ if __name__ == "__main__":
         check_create_github_repo(GITHUB_REPO_NAME)
         print("GitHub repository check completed.")
     
-    if not check_whisper_installed():
-        print("Whisper is not installed. Attempting to install Whisper...")
-        install_whisper()
-        print("Whisper installation completed.")
-
-    initialize_local_git_repo(REPO_ROOT)
-    print("Local Git repository initialized.")
+    # Generate and compare hashes before syncing
+    hash_file = os.path.join(REPO_ROOT, 'chroma_hashes.txt')
+    generate_chroma_hashes(CHROMADB_DB_PATH, hash_file)
     
+    pull_and_sync_chromadb_if_necessary(GITHUB_REPO_NAME, CHROMADB_DB_PATH, hash_file, os.path.relpath(CHROMADB_DB_PATH, REPO_ROOT))
+
     try:
         new_files = []
         process_feed(RSS_FEED_URL, PODCAST_AUDIO_FOLDER, PODCAST_HISTORY_FILE, debug=True)
