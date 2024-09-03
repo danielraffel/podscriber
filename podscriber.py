@@ -5,9 +5,10 @@ from datetime import datetime
 import html
 import re
 import subprocess
-import sqlite3
 import shutil
 import hashlib
+import chromadb
+from chromadb.config import Settings
 
 from config import (
     RSS_FEED_URL, PODCAST_AUDIO_FOLDER, PODCAST_HISTORY_FILE, WHISPER_MODEL_PATH,
@@ -23,9 +24,11 @@ REPO_ROOT = os.path.expanduser(REPO_ROOT)
 PODCAST_AUDIO_FOLDER = os.path.expanduser(PODCAST_AUDIO_FOLDER)
 PODCAST_HISTORY_FILE = os.path.expanduser(PODCAST_HISTORY_FILE)
 TRANSCRIBED_FOLDER = os.path.join(REPO_ROOT, "transcribed")
-DB_PATH = os.path.join(REPO_ROOT, "podcasts.db")
 
-# Git Operations
+# Initialize ChromaDB client and collection
+chroma_client = chromadb.Client(Settings())
+podcast_collection = chroma_client.create_collection("podcasts")
+
 def check_git_installed():
     """Ensure git is installed on the system."""
     try:
@@ -108,10 +111,6 @@ def initialize_local_git_repo(repo_root):
     else:
         print("Git repository already initialized.")
 
-    # Check if the database exists in the repository
-    if ENABLE_GITHUB_COMMIT:
-        check_and_pull_database(repo_root)
-
 def check_github_pages_enabled():
     """Check if GitHub Pages is already enabled."""
     url = f"https://api.github.com/repos/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/pages"
@@ -154,42 +153,30 @@ def enable_github_pages():
     else:
         print(f"Failed to enable GitHub Pages: {response.status_code} - {response.text}")
 
-def calculate_file_hash(file_path):
-    """Calculate SHA-256 hash of a file."""
-    sha256_hash = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        for byte_block in iter(lambda: f.read(4096), b""):
-            sha256_hash.update(byte_block)
-    return sha256_hash.hexdigest()
-
-def check_and_pull_database(repo_root):
-    """Check if the database exists in the remote repository and pull it if available."""
-    db_path = os.path.join(repo_root, "podcasts.db")
-    local_hash = None
-
-    if os.path.exists(db_path):
-        local_hash = calculate_file_hash(db_path)
-        print(f"Local database hash: {local_hash}")
+def update_readme_with_archive_link(repo_root, archive_url):
+    """Update the README.md by replacing the existing description with the archive link."""
+    readme_path = os.path.join(repo_root, "README.md")
+    if os.path.exists(readme_path):
+        with open(readme_path, "r+") as f:
+            content = f.read()
+            updated_content = re.sub(
+                r'This repository contains podcast archives\.',
+                f'You can access the podcast archive [here]({archive_url}).',
+                content
+            )
+            f.seek(0)
+            f.write(updated_content)
+            f.truncate()
+        print(f"Updated README.md with archive link: {archive_url}")
     else:
-        print("Local database does not exist. It will be pulled from GitHub.")
+        with open(readme_path, "w") as f:
+            f.write(f"# {GITHUB_REPO_NAME}\n\nYou can access the podcast archive [here]({archive_url}).\n")
+        print(f"Created README.md and added archive link: {archive_url}")
 
-    # Attempt to pull the latest database from GitHub
-    try:
-        subprocess.run(["git", "checkout", "main"], cwd=repo_root, check=True)
-        subprocess.run(["git", "pull", "origin", "main"], cwd=repo_root, check=True)
-
-        if os.path.exists(db_path):
-            remote_hash = calculate_file_hash(db_path)
-            print(f"Remote database hash: {remote_hash}")
-
-            if local_hash and local_hash == remote_hash:
-                print("Local database is up-to-date.")
-            else:
-                print("Local database was updated from remote.")
-        else:
-            print("No database found in the remote repository.")
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to pull database from GitHub: {e}")
+    # Commit and push the updated README.md
+    subprocess.run(["git", "add", "README.md"], cwd=repo_root, check=True)
+    subprocess.run(["git", "commit", "-m", "Update README.md with podcast archive link"], cwd=repo_root, check=True)
+    subprocess.run(["git", "push", "origin", "main"], cwd=repo_root, check=True)
 
 def commit_database_and_files(repo_root, db_path, history_file, new_files):
     """Commit changes to the database, HTML file, and new podcast files."""
@@ -198,8 +185,7 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
         return
 
     try:
-        # Stage the database, HTML file, and transcribed folder
-        subprocess.run(["git", "add", os.path.relpath(db_path, repo_root)], cwd=repo_root, check=True)
+        # Stage the HTML file and transcribed folder
         subprocess.run(["git", "add", os.path.relpath(history_file, repo_root)], cwd=repo_root, check=True)
         
         # Add the entire transcribed folder to staging
@@ -213,125 +199,69 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
         # Check if there are any changes to commit
         status = subprocess.run(["git", "status", "--porcelain"], cwd=repo_root, capture_output=True, text=True).stdout
         if status.strip():
-            subprocess.run(["git", "commit", "-m", "Update database, HTML, and podcast files"], cwd=repo_root, check=True)
+            subprocess.run(["git", "commit", "-m", "Update HTML and podcast files"], cwd=repo_root, check=True)
+
+            # Pull changes from the remote before pushing
+            subprocess.run(["git", "pull", "--rebase", "origin", "main"], cwd=repo_root, check=True)
+
             subprocess.run(["git", "push", "origin", "main"], cwd=repo_root, check=True)
-            print("Database, HTML, and podcast files committed and pushed.")
+            print("HTML and podcast files committed and pushed.")
             return True
         else:
-            print("No changes to commit for database, HTML, or podcast files.")
+            print("No changes to commit for HTML or podcast files.")
             return False
 
     except subprocess.CalledProcessError as e:
         print(f"Failed to commit changes: {e}")
         return False
 
-# System Checks and Setup
-def install_sqlite_with_brew():
-    """Install SQLite using Homebrew if not installed."""
-    try:
-        subprocess.run(["sqlite3", "--version"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        print("SQLite is installed.")
-    except subprocess.CalledProcessError:
-        print("SQLite is not installed. Installing with brew...")
-        subprocess.run(["brew", "install", "sqlite"], check=True)
-        print("SQLite installed successfully.")
-
-def check_whisper_installed():
-    """Check if Whisper is installed by verifying the existence of key files."""
-    whisper_exec = os.path.expanduser(WHISPER_EXECUTABLE)
-    whisper_model = os.path.expanduser(WHISPER_MODEL_PATH)
-    whisper_root = os.path.expanduser(WHISPER_ROOT)
-
-    if os.path.isdir(whisper_root) and os.path.isfile(whisper_exec) and os.path.isfile(whisper_model):
-        print("Whisper is installed and ready to use.")
-        return True
-    else:
-        print("Whisper is not fully installed.")
-        return False
-
-def install_whisper():
-    """Attempt to install Whisper if it's not found."""
-    try:
-        whisper_setup_path = os.path.expanduser(WHISPER_SETUP)
-        os.makedirs(whisper_setup_path, exist_ok=True)
-        print("Attempting to install Whisper...")
-        os.system(f"git clone https://github.com/danielraffel/WhisperSetup.git {whisper_setup_path}")
-        os.system(f"cd {whisper_setup_path} && ./whisper_setup.sh")
-        print("Whisper installation complete.")
-    except Exception as e:
-        print(f"Failed to install Whisper: {e}")
-        exit(1)
-
-# Database Operations
-def setup_database(db_path):
-    """Setup the SQLite database and tables."""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+# Database Operations using ChromaDB
+def add_podcast_to_db_chroma(metadata, mp3_url, transcript_name, transcript_text):
+    metadata['mp3_url'] = mp3_url  # Store the mp3_url in the metadata
+    document = f"{metadata['podcast_name']} - {metadata['episode_title']}\nTranscript: {transcript_text}"
     
-    # Define the SQL query to create the podcasts table with separate podcast_name and episode_title
-    cursor.execute('''CREATE TABLE IF NOT EXISTS podcasts (
-                        id INTEGER PRIMARY KEY,
-                        podcast_name TEXT,           -- Podcast name
-                        episode_title TEXT,          -- Podcast episode title
-                        listenDate TEXT,             -- Date you listened to the episode
-                        guid TEXT,                   -- Unique identifier for the episode
-                        link TEXT,                   -- Link to the episode's webpage
-                        mp3_file_path TEXT,          -- URL of the original MP3 file from the RSS feed enclosure
-                        transcript_name TEXT,        -- URL of the transcription file stored on GitHub
-                        transcript_text TEXT         -- Content of the transcription text
-                    )''')
-    conn.commit()
-    conn.close()
+    podcast_collection.upsert(
+        documents=[document],  # Add the text of the transcript with additional metadata as a document
+        ids=[metadata['guid']],  # Use the GUID as the document ID
+        metadatas=[metadata]  # Store the entire metadata dictionary
+    )
+    print("Data committed to ChromaDB.")
 
-def add_podcast_to_db(db_path, metadata, mp3_url, transcript_name, transcript_text):
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+def generate_html_from_chroma_db(history_file):
+    """Generate HTML file from ChromaDB collection."""
+    print(f"Generating HTML from ChromaDB")
     
-    try:
-        print(f"Inserting podcast data: {metadata['podcast_name']} - {metadata['episode_title']}")
-        cursor.execute('''INSERT INTO podcasts (podcast_name, episode_title, listenDate, guid, link, mp3_file_path, transcript_name, transcript_text) 
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-               (metadata['podcast_name'], metadata['episode_title'], metadata['listenDate'], metadata['guid'], metadata['link'], mp3_url, transcript_name, transcript_text))
-        conn.commit()
-        print("Data committed to database.")
-    except sqlite3.IntegrityError as ie:
-        print(f"SQLite IntegrityError: {ie}")
-    except sqlite3.Error as e:
-        print(f"SQLite Error: {e}")
-    finally:
-        conn.close()
-
-def generate_html_from_db(db_path, history_file):
-    """Generate HTML file from SQLite database."""
-    print(f"Generating HTML from DB: {db_path}")
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
     # Start the HTML log (this will overwrite any existing content)
     start_html_log(history_file)
+    
+    # Retrieve all documents in the collection
+    results = podcast_collection.query(
+        query_texts=[""],  # Empty query to retrieve all documents
+        n_results=1000     # Assume a large enough number to get all results
+    )
+    
+    documents = results['documents'][0]
+    ids = results['ids'][0]
+    metadatas = results.get('metadatas', [{}])[0]  # Ensure we retrieve metadata
 
-    cursor.execute('SELECT podcast_name, episode_title, listenDate, mp3_file_path, transcript_name, guid, link FROM podcasts')
-    rows = cursor.fetchall()
-    print(f"Found {len(rows)} podcast entries in the database.")
-    for row in rows:
-        podcast_name, episode_title, listenDate, mp3_file_path, transcript_name, guid, link = row
-        print(f"Adding podcast entry to HTML: Podcast={podcast_name}, Episode={episode_title}, ListenDate={listenDate}, FileName={mp3_file_path}, TranscriptName={transcript_name}, GUID={guid}, Link={link}")
-        save_downloaded_url(history_file, {
-            'podcast_name': podcast_name,
-            'episode_title': episode_title,
-            'listenDate': listenDate,
-            'guid': guid,
-            'link': link
-        }, mp3_file_path, transcript_name)
-
+    print(f"Found {len(documents)} podcast entries in ChromaDB.")
+    
+    for document, guid, metadata in zip(documents, ids, metadatas):
+        # Extract metadata from the document
+        podcast_name = metadata.get("podcast_name", "Unknown Podcast")
+        episode_title = metadata.get("episode_title", "Unknown Episode")
+        listen_date = metadata.get("listenDate", "Unknown Date")
+        
+        print(f"Adding podcast entry to HTML: Podcast={podcast_name}, Episode={episode_title}, GUID={guid}")
+        save_downloaded_url(history_file, metadata, transcript_name=f"{normalize_folder_name(episode_title)}.txt")
+    
     # End the HTML log properly
     end_html_log(history_file)
-    conn.close()
     print(f"HTML generation complete: {history_file}")
 
-# Feed Processing
-def process_feed(feed_url, download_folder, history_file, db_path, debug=True):
-    """Process the RSS feed, download new MP3 files, transcribe them, and store data in SQLite DB."""
+# Feed Processing with ChromaDB
+def process_feed(feed_url, download_folder, history_file, debug=True):
+    """Process the RSS feed, download new MP3 files, transcribe them, and store data in ChromaDB."""
     if debug:
         print(f"Fetching feed from {feed_url}")
     
@@ -339,10 +269,6 @@ def process_feed(feed_url, download_folder, history_file, db_path, debug=True):
     response.raise_for_status()
 
     root = ET.fromstring(response.content)
-
-    # Connect to the database
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
 
     new_files = []
 
@@ -363,28 +289,33 @@ def process_feed(feed_url, download_folder, history_file, db_path, debug=True):
             print(f"Error extracting podcast and episode from title '{full_title}': {e}")
             continue
 
+        # Use pubDate as listenDate
+        listenDate = pubDate if pubDate else datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z")
+        
         if enclosure is not None:
             mp3_url = enclosure.get('url')
             if mp3_url:
                 if debug:
                     print(f"Enclosure URL found: {mp3_url}")
                 
-                # Check if this URL is already in the database
-                cursor.execute("SELECT COUNT(1) FROM podcasts WHERE mp3_file_path = ?", (mp3_url,))
-                already_processed = cursor.fetchone()[0] > 0
+                # Construct metadata dictionary
+                metadata = {
+                    "podcast_name": podcast_name,
+                    "episode_title": episode_title,
+                    "listenDate": listenDate,
+                    "guid": guid if guid else mp3_url,
+                    "link": link if link else ""
+                }
+                
+                # Retrieve all documents and filter by 'guid'
+                existing_docs = podcast_collection.get()
+                already_processed = any(doc['metadata']['guid'] == guid for doc in existing_docs['documents'])
                 
                 if not already_processed:
                     if debug:
                         print(f"New file found: {mp3_url}")
                     
                     try:
-                        metadata = {
-                            "podcast_name": podcast_name,
-                            "episode_title": episode_title,
-                            "listenDate": pubDate if pubDate is not None else datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z"),
-                            "guid": guid if guid is not None else mp3_url,
-                            "link": link if link is not None else ""
-                        }
                         mp3_file_path, filename = download_file(mp3_url, download_folder, full_title)
                         transcript_file, transcript_text = transcribe_with_whisper(mp3_file_path, metadata)
                         
@@ -397,8 +328,8 @@ def process_feed(feed_url, download_folder, history_file, db_path, debug=True):
                         if debug:
                             print(f"Organized file: Transcript={new_transcript_path}")
                         
-                        # Save podcast metadata into the database, including transcript text
-                        add_podcast_to_db(db_path, metadata, mp3_url, os.path.basename(new_transcript_path), transcript_text)
+                        # Save podcast metadata into the ChromaDB, including transcript text
+                        add_podcast_to_db_chroma(metadata, mp3_url, os.path.basename(new_transcript_path), transcript_text)
 
                         if debug:
                             print(f"Downloaded, transcribed, and saved: {mp3_url} as {filename} with transcript {new_transcript_path}")
@@ -413,26 +344,54 @@ def process_feed(feed_url, download_folder, history_file, db_path, debug=True):
             if debug:
                 print(f"No enclosure found for {full_title}")
 
-    # Close the database connection
-    conn.close()
-
     # Ensure HTML is generated
     if new_files or debug:
         print("Generating HTML file...")
-        generate_html_from_db(db_path, history_file)
+        generate_html_from_chroma_db(history_file)
     else:
         print("No new podcasts found, skipping HTML generation.")
+
+# Utilities and File Operations
+# def extract_podcast_and_episode(title):
+#     # Log the title before processing
+#     print(f"Processing title: {title}")
+    
+#     # Split the title into parts based on colon
+#     parts = title.split(": ", 2)  # Split only on the first two colons
+    
+#     if len(parts) == 3:
+#         podcast_name = parts[0].strip()  # The first part before the first colon
+#         episode_title = f"{parts[1].strip()}: {parts[2].strip()}"  # Combine the rest as the episode title
+#     else:
+#         # Fallback for unexpected formats, use the entire title as both name and title
+#         podcast_name = title.strip()
+#         episode_title = "Unknown Episode"
+    
+#     # Log the results after processing
+#     print(f"Extracted podcast_name: {podcast_name}, episode_title: {episode_title}")
+    
+#     return podcast_name, episode_title
+
+def format_date_long(date_str):
+    """Format the date to 'Month Day, Year' for TXT files."""
+    date_obj = datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S %z")
+    return date_obj.strftime("%B %d, %Y")
+
+def format_date_short(date_str):
+    """Format the date to 'MM/DD/YYYY' for HTML files."""
+    date_obj = datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S %z")
+    return date_obj.strftime("%m/%d/%Y")
 
 def extract_podcast_and_episode(title):
     # Log the title before processing
     print(f"Processing title: {title}")
     
-    # Split the title into parts based on colon
-    parts = title.split(": ", 2)  # Split only on the first two colons
+    # Split the title into parts based on the first colon
+    parts = title.split(": ", 1)  # Split only on the first colon
     
-    if len(parts) == 3:
-        podcast_name = parts[0].strip()  # The first part before the first colon
-        episode_title = f"{parts[1].strip()}: {parts[2].strip()}"  # Combine the rest as the episode title
+    if len(parts) == 2:
+        podcast_name = parts[0].strip()  # The first part before the colon is the podcast name
+        episode_title = parts[1].strip()  # The second part is the episode title
     else:
         # Fallback for unexpected formats, use the entire title as both name and title
         podcast_name = title.strip()
@@ -443,7 +402,6 @@ def extract_podcast_and_episode(title):
     
     return podcast_name, episode_title
 
-# File Operations
 def normalize_folder_name(title):
     """Normalize folder names by replacing spaces with underscores and removing non-alphanumeric characters."""
     return re.sub(r'[^\w\s-]', '', title).replace(" ", "_").strip("_")
@@ -507,13 +465,6 @@ def transcribe_with_whisper(file_path, metadata):
         print(f"Error during transcription: {e}")
         return None, None
 
-    finally:
-        # Clean up: remove the original MP3 and WAV files
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        if os.path.exists(wav_file):
-            os.remove(wav_file)
-
 def organize_podcast_files(podcast_name, episode_title, transcript_file):
     """Organize podcast transcript files into folders and return the new file path."""
     normalized_podcast_name = normalize_folder_name(podcast_name)
@@ -528,18 +479,6 @@ def organize_podcast_files(podcast_name, episode_title, transcript_file):
     shutil.move(transcript_file, new_transcript_path)
 
     return new_transcript_path
-
-# Utilities
-def format_date_long(date_str):
-    """Format the date to 'Month Day, Year' for TXT files."""
-    date_obj = datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S %z")
-    return date_obj.strftime("%B %d, %Y")
-
-def format_date_short(date_str):
-    """Format the date to 'MM/DD/YYYY' for HTML files."""
-    date_obj = datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S %z")
-    return date_obj.strftime("%m/%d/%Y")
-
 
 # HTML Operations
 def start_html_log(history_file):
@@ -672,23 +611,26 @@ def end_html_log(history_file):
     with open(history_file, "a") as f:
         f.write(footer)
 
-def save_downloaded_url(history_file, metadata, mp3_file_path, transcript_name):
+def save_downloaded_url(history_file, metadata, transcript_name):
     """Save the downloaded URL and metadata to the PodcastHistory file."""
     print(f"Saving to HTML: {metadata['episode_title']}")
 
     # Construct the transcript URL on GitHub
     transcript_github_url = f"https://raw.githubusercontent.com/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/main/transcribed/{normalize_folder_name(metadata['podcast_name'])}/{transcript_name}"
     
-    # Handle case where link might be None
-    pod_site_link = f"<a href=\"{html.escape(metadata['link'])}\" target=\"_blank\">Pod Site</a>" if metadata['link'] else "N/A"
+    # Handle case where link might be None or empty
+    if metadata.get('link'):
+        pod_site_link = f"<a href=\"{html.escape(metadata['link'])}\" target=\"_blank\">Pod Site</a>"
+    else:
+        pod_site_link = "N/A"
     
     entry = f"""
 <tr>
-    <td><a href="{html.escape(metadata['link'])}" target="_blank">{html.escape(metadata['podcast_name'])}</a></td>
+    <td><a href="{html.escape(metadata.get('link', ''))}" target="_blank">{html.escape(metadata['podcast_name'])}</a></td>
     <td><a href="{html.escape(metadata['guid'])}" target="_blank">{html.escape(metadata['episode_title'])}</a></td>
     <td>{html.escape(format_date_short(metadata['listenDate']))}</td>
     <td><a href="{transcript_github_url}" target="_blank" class="no-underline">&#x1F4C4;</a></td>
-    <td><audio src="{mp3_file_path}" controls></audio></td>
+    <td><audio src="{metadata['mp3_url']}" controls></audio></td>
 </tr>
     """
     with open(history_file, "a") as f:
@@ -708,30 +650,18 @@ def update_html_links(history_file):
         f.write(content)
         f.truncate()
 
-def update_readme_with_archive_link(repo_root, archive_url):
-    """Update the README.md by replacing the existing description with the archive link."""
-    readme_path = os.path.join(repo_root, "README.md")
-    if os.path.exists(readme_path):
-        with open(readme_path, "r+") as f:
-            content = f.read()
-            updated_content = re.sub(
-                r'This repository contains podcast archives\.',
-                f'You can access the podcast archive [here]({archive_url}).',
-                content
-            )
-            f.seek(0)
-            f.write(updated_content)
-            f.truncate()
-        print(f"Updated README.md with archive link: {archive_url}")
-    else:
-        with open(readme_path, "w") as f:
-            f.write(f"# {GITHUB_REPO_NAME}\n\nYou can access the podcast archive [here]({archive_url}).\n")
-        print(f"Created README.md and added archive link: {archive_url}")
+def check_whisper_installed():
+    """Check if Whisper is installed by verifying the existence of key files."""
+    whisper_exec = os.path.expanduser(WHISPER_EXECUTABLE)
+    whisper_model = os.path.expanduser(WHISPER_MODEL_PATH)
+    whisper_root = os.path.expanduser(WHISPER_ROOT)
 
-    # Commit and push the updated README.md
-    subprocess.run(["git", "add", "README.md"], cwd=repo_root, check=True)
-    subprocess.run(["git", "commit", "-m", "Update README.md with podcast archive link"], cwd=repo_root, check=True)
-    subprocess.run(["git", "push", "origin", "main"], cwd=repo_root, check=True)
+    if os.path.isdir(whisper_root) and os.path.isfile(whisper_exec) and os.path.isfile(whisper_model):
+        print("Whisper is installed and ready to use.")
+        return True
+    else:
+        print("Whisper is not fully installed.")
+        return False
 
 # Main Script Execution
 if __name__ == "__main__":
@@ -751,9 +681,6 @@ if __name__ == "__main__":
         check_create_github_repo(GITHUB_REPO_NAME)
         print("GitHub repository check completed.")
     
-    install_sqlite_with_brew()
-    print("SQLite check and installation completed.")
-
     if not check_whisper_installed():
         print("Whisper is not installed. Attempting to install Whisper...")
         install_whisper()
@@ -762,18 +689,27 @@ if __name__ == "__main__":
     initialize_local_git_repo(REPO_ROOT)
     print("Local Git repository initialized.")
     
-    setup_database(DB_PATH)
-    print("Database setup completed.")
-
     try:
         new_files = []
-        process_feed(RSS_FEED_URL, PODCAST_AUDIO_FOLDER, PODCAST_HISTORY_FILE, DB_PATH, debug=True)
+        process_feed(RSS_FEED_URL, PODCAST_AUDIO_FOLDER, PODCAST_HISTORY_FILE, debug=True)
         print("RSS feed processing completed.")
         
         if ENABLE_GITHUB_COMMIT:
-            upload_successful = commit_database_and_files(REPO_ROOT, DB_PATH, PODCAST_HISTORY_FILE, new_files)
+            upload_successful = commit_database_and_files(REPO_ROOT, None, PODCAST_HISTORY_FILE, new_files)
             if upload_successful:
-                print("Database and files successfully uploaded to GitHub.")
+                print("Files successfully uploaded to GitHub.")
+                
+                # Clean up: remove the original MP3 and WAV files only after successful upload
+                for file_path in new_files:
+                    base_file = os.path.join(PODCAST_AUDIO_FOLDER, os.path.basename(file_path).replace(".txt", ".mp3"))
+                    wav_file = base_file.replace(".mp3", ".wav")
+                    if os.path.exists(base_file):
+                        os.remove(base_file)
+                        print(f"Deleted file: {base_file}")
+                    if os.path.exists(wav_file):
+                        os.remove(wav_file)
+                        print(f"Deleted file: {wav_file}")
+                    
             else:
                 print("No changes to upload to GitHub.")
         
