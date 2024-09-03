@@ -7,6 +7,9 @@ PODCAST_AUDIO_FOLDER = "~/podscriber/podcast_mp3s" # Path to the folder where po
 PODCAST_HISTORY_FILE = "~/podscriber/podcast_history.html" # Path to the HTML file where your podcast archive will be stored
 TRANSCRIBED_FOLDER = "~/podscriber/transcribed"  # Path where transcribed text files are stored
 
+# ChromaDB Integration Settings
+CHROMADB_DB_PATH = "~/podscriber/chroma_db" # Path to the ChromaDB database file
+
 # Configuration for Whisper transcription
 WHISPER_SETUP = "~/WhisperSetup" # Path to the WhisperSetup folder
 WHISPER_ROOT = "~/whisper.cpp" # Path to the Whisper root folder
