@@ -30,6 +30,9 @@ ENABLE_GITHUB_COMMIT = True # Set to True to enable committing transcribed text 
 UPDATE_HTML_LINKS = True # Set to True to update HTML links in the PODCAST_HISTORY_FILE to point to GitHub URLs
 ENABLE_GITHUB_PAGES = True # Set to True to enable GitHub Pages automatically after processing
 
+# Special gitignore for the GitHub repo
+GITIGNORE_UNIQUE_TO_GITHUB_REPO = "~/podscriber/.gitignore-github-repo"  # Unique .gitignore used for script commits to GITHUB_REPO_NAME
+
 # Debugging and Testing
 DEBUG_MODE_LIMIT = None  # Set this to limit the number of files to download during debugging for example 2. Set to None or a number if you comment out it will cause a problem.
 
