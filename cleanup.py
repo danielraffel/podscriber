@@ -1,6 +1,7 @@
 import os
 import shutil
 import requests
+import sys
 from config import REPO_ROOT, PODCAST_AUDIO_FOLDER, PODCAST_HISTORY_FILE, TRANSCRIBED_FOLDER, CHROMADB_DB_PATH, GITHUB_USERNAME, GITHUB_TOKEN, GITHUB_REPO_NAME
 
 # Function to display help message
@@ -21,6 +22,46 @@ def show_help():
     print(help_message)
     exit(0)
 
+# Helper function to delete a folder
+def delete_folder(path):
+    if os.path.exists(path):
+        try:
+            shutil.rmtree(path)
+            print(f"Deleted: {path}")
+        except Exception as e:
+            print(f"Failed to delete {path}: {e}")
+    else:
+        print(f"Path does not exist: {path}")
+
+# Helper function to delete a file
+def delete_file(path):
+    if os.path.exists(path):
+        try:
+            os.remove(path)
+            print(f"Deleted: {path}")
+        except Exception as e:
+            print(f"Failed to delete {path}: {e}")
+    else:
+        print(f"File does not exist: {path}")
+
+# Helper function to delete contents of a folder but not the folder itself
+def delete_folder_contents(path):
+    if os.path.exists(path):
+        try:
+            for root, dirs, files in os.walk(path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    os.remove(file_path)
+                    print(f"Deleted file: {file_path}")
+                for dir in dirs:
+                    dir_path = os.path.join(root, dir)
+                    shutil.rmtree(dir_path)
+                    print(f"Deleted directory: {dir_path}")
+        except Exception as e:
+            print(f"Failed to delete contents of {path}: {e}")
+    else:
+        print(f"Path does not exist: {path}")
+
 # Default flags (all operations enabled)
 DELETE_GIT = True
 DELETE_CHROMADB = True
@@ -31,7 +72,6 @@ DELETE_TRANSCRIBED = True
 DELETE_REPO = True
 
 # Parse command-line arguments
-import sys
 for arg in sys.argv[1:]:
     if arg in ("-h", "--help"):
         show_help()
@@ -62,34 +102,25 @@ CHROMA_HASH_FILE = os.path.join(REPO_ROOT, "chroma_hashes.txt")
 
 # Delete specific files and directories based on flags
 if DELETE_GIT:
-    git_path = os.path.join(REPO_ROOT, ".git")
-    print(f"Deleting {git_path}")
-    shutil.rmtree(git_path, ignore_errors=True)
+    delete_folder(os.path.join(REPO_ROOT, ".git"))
 
 if DELETE_CHROMADB:
-    print(f"Deleting all files and directories within {CHROMADB_DB_PATH}")
-    shutil.rmtree(CHROMADB_DB_PATH, ignore_errors=True)
+    delete_folder(CHROMADB_DB_PATH)
 
 if DELETE_CHROMAHASH:
-    print(f"Deleting {CHROMA_HASH_FILE}")
-    if os.path.exists(CHROMA_HASH_FILE):
-        os.remove(CHROMA_HASH_FILE)
+    delete_file(CHROMA_HASH_FILE)
 
 if DELETE_HISTORY:
-    print(f"Deleting {PODCAST_HISTORY_FILE}")
-    if os.path.exists(PODCAST_HISTORY_FILE):
-        os.remove(PODCAST_HISTORY_FILE)
+    delete_file(PODCAST_HISTORY_FILE)
 
 if DELETE_AUDIO:
-    print(f"Deleting all files and directories within {PODCAST_AUDIO_FOLDER}")
-    shutil.rmtree(PODCAST_AUDIO_FOLDER, ignore_errors=True)
+    delete_folder_contents(PODCAST_AUDIO_FOLDER)  # Only delete contents
 
 if DELETE_TRANSCRIBED:
-    print(f"Deleting all files and directories within {TRANSCRIBED_FOLDER}")
-    shutil.rmtree(TRANSCRIBED_FOLDER, ignore_errors=True)
+    delete_folder_contents(TRANSCRIBED_FOLDER)  # Only delete contents
 
 if DELETE_REPO:
-    REPO_URL = f"https://github.com/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}"
+    REPO_URL = f"https://api.github.com/repos/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}"
     print(f"Checking if repository exists at {REPO_URL}")
 
     # Check if the repository exists
