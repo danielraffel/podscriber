@@ -5,3 +5,4 @@ config.py
 uv.lock
 pyproject.toml
 podscriber.py
+podscriber.code-workspace
