@@ -9,6 +9,7 @@ import shutil
 import hashlib
 import chromadb
 
+# Import configuration
 from config import (
     RSS_FEED_URL, PODCAST_AUDIO_FOLDER, PODCAST_HISTORY_FILE, WHISPER_MODEL_PATH,
     WHISPER_EXECUTABLE, TRANSCRIBED_FOLDER, AUTO_OVERWRITE, GITHUB_REPO_CHECK,
@@ -28,6 +29,7 @@ PODCAST_HISTORY_FILE = os.path.expanduser(PODCAST_HISTORY_FILE)
 TRANSCRIBED_FOLDER = os.path.join(REPO_ROOT, "transcribed")
 CHROMADB_DB_PATH = os.path.expanduser(CHROMADB_DB_PATH)
 
+# Check if git is installed and error out if not
 def check_git_installed():
     """Ensure git is installed on the system."""
     try:
@@ -37,6 +39,15 @@ def check_git_installed():
         print("Git is not installed. Please install git before running the script.")
         exit(1)
 
+# Ensure that each Git command checks for successful execution and handles failures appropriately
+def run_git_command(command, cwd):
+    result = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"Git command {' '.join(command)} failed with error: {result.stderr}")
+        return False
+    return True
+
+# Check if SSH connection to GitHub is properly configured using SSH key
 def check_github_ssh_connection():
     """Check if SSH connection to GitHub is properly configured."""
     try:
@@ -46,16 +57,21 @@ def check_github_ssh_connection():
             stderr=subprocess.PIPE
         )
         response = result.stdout.decode('utf-8') + result.stderr.decode('utf-8')
-        if "You've successfully authenticated" in response:
+        if "successfully authenticated" in response.lower():
             print("SSH connection to GitHub is properly configured.")
             return True
+        elif "are you sure you want to continue connecting" in response.lower():
+            print("SSH key fingerprint not recognized. Try connecting manually to accept the new fingerprint.")
+            return False
         else:
-            print("SSH connection to GitHub failed. Please configure SSH key properly.")
+            print("SSH connection to GitHub failed. Please configure your SSH keys properly.")
+            print(f"SSH response: {response}")
             return False
     except Exception as e:
         print(f"SSH connection to GitHub encountered an error: {e}")
         return False
 
+# Check if the GitHub repository exists, and create it if not
 def check_create_github_repo(repo_name):
     """Check if the GitHub repository exists, and create it if not."""
     headers = {
@@ -78,44 +94,70 @@ def check_create_github_repo(repo_name):
     else:
         print(f"Repository {repo_name} exists.")
 
+# Check if the directory is a Git repository and return the result
 def is_git_repo(repo_root):
     """Check if the directory is a Git repository."""
     return os.path.exists(os.path.join(repo_root, ".git"))
 
+# Initialize the local Git repository or pull changes if it already exists
 def initialize_local_git_repo(repo_root):
     """Initialize the local Git repository or pull changes if it already exists."""
     if not os.path.exists(repo_root):
         print(f"Cloning repository into {repo_root}...")
-        subprocess.run(["git", "clone", f"git@github.com:{GITHUB_USERNAME}/{GITHUB_REPO_NAME}.git", repo_root], check=True)
+        if not run_git_command(["git", "clone", f"git@github.com:{GITHUB_USERNAME}/{GITHUB_REPO_NAME}.git", repo_root], cwd="."):
+            print("Failed to clone repository.")
+            return
     else:
         if is_git_repo(repo_root):
             print(f"Git repository already initialized in {repo_root}, pulling latest changes.")
-            subprocess.run(["git", "pull", "origin", "main"], cwd=repo_root, check=True)
+            if not run_git_command(["git", "pull", "origin", "main"], cwd=repo_root):
+                print("Failed to pull latest changes.")
+                return
         else:
             print(f"Directory {repo_root} exists but is not a git repository. Initializing as git repository.")
-            subprocess.run(["git", "init"], cwd=repo_root, check=True)
-            subprocess.run(["git", "remote", "add", "origin", f"git@github.com:{GITHUB_USERNAME}/{GITHUB_REPO_NAME}.git"], cwd=repo_root, check=True)
+            if not run_git_command(["git", "init"], cwd=repo_root):
+                print("Failed to initialize git repository.")
+                return
+            if not run_git_command(["git", "remote", "add", "origin", f"git@github.com:{GITHUB_USERNAME}/{GITHUB_REPO_NAME}.git"], cwd=repo_root):
+                print("Failed to add remote origin.")
+                return
             # Check if the remote has any commits
             result = subprocess.run(["git", "ls-remote", "--heads", "origin"], cwd=repo_root, capture_output=True, text=True)
             if result.stdout.strip():
                 # Remote repository has commits, pull them
-                subprocess.run(["git", "pull", "origin", "main"], cwd=repo_root, check=True)
+                if not run_git_command(["git", "pull", "origin", "main"], cwd=repo_root):
+                    print("Failed to pull from remote repository.")
+                    return
                 print("Pulled existing main branch from remote.")
             else:
                 # Remote is empty, create initial commit and push
                 create_initial_commit(repo_root)
                 print("Created and pushed initial commit to main branch.")
 
+# Create the initial commit in the local Git repository and push it to the remote repository if it's empty
 def create_initial_commit(repo_root):
     """Create the initial commit in the local Git repository."""
-    with open(os.path.join(repo_root, "README.md"), "w") as f:
-        f.write(f"# {GITHUB_REPO_NAME}\n\nThis repository contains podcast archives.")
+    readme_path = os.path.join(repo_root, "README.md")
+    try:
+        with open(readme_path, "w") as f:
+            f.write(f"# {GITHUB_REPO_NAME}\n\nThis repository contains podcast archives.")
+        if not run_git_command(["git", "add", "README.md"], repo_root):
+            print("Failed to add README.md to Git.")
+            return
+        if not run_git_command(["git", "commit", "-m", "Initial commit"], repo_root):
+            print("Failed to commit README.md.")
+            return
+        if not run_git_command(["git", "branch", "-M", "main"], repo_root):
+            print("Failed to rename branch to main.")
+            return
+        if not run_git_command(["git", "push", "-u", "origin", "main"], repo_root):
+            print("Failed to push initial commit to remote.")
+            return
+        print("Initial commit created and pushed successfully.")
+    except Exception as e:
+        print(f"Error during initial commit: {e}")
 
-    subprocess.run(["git", "add", "README.md"], cwd=repo_root, check=True)
-    subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_root, check=True)
-    subprocess.run(["git", "branch", "-M", "main"], cwd=repo_root, check=True)
-    subprocess.run(["git", "push", "-u", "origin", "main"], cwd=repo_root, check=True)
-
+# Check if GitHub Pages is already enabled
 def check_github_pages_enabled():
     """Check if GitHub Pages is already enabled."""
     url = f"https://api.github.com/repos/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/pages"
@@ -126,6 +168,7 @@ def check_github_pages_enabled():
     response = requests.get(url, headers=headers)
     return response.status_code == 200
 
+# Enable GitHub Pages for the repository and update the README.md with the PODCAST_HISTORY_FILE link
 def enable_github_pages():
     """Enable GitHub Pages for the repository."""
     if check_github_pages_enabled():
@@ -158,6 +201,7 @@ def enable_github_pages():
     else:
         print(f"Failed to enable GitHub Pages: {response.status_code} - {response.text}")
 
+# Update the README.md by replacing the existing description with the archive link
 def update_readme_with_archive_link(repo_root, archive_url):
     """Update the README.md by replacing the existing description with the archive link."""
     readme_path = os.path.join(repo_root, "README.md")
@@ -179,10 +223,17 @@ def update_readme_with_archive_link(repo_root, archive_url):
         print(f"Created README.md and added archive link: {archive_url}")
 
     # Commit and push the updated README.md
-    subprocess.run(["git", "add", "README.md"], cwd=repo_root, check=True)
-    subprocess.run(["git", "commit", "-m", "Update README.md with podcast archive link"], cwd=repo_root, check=True)
-    subprocess.run(["git", "push", "origin", "main"], cwd=repo_root, check=True)
+    if not run_git_command(["git", "add", "README.md"], cwd=repo_root):
+        print("Failed to add README.md to Git.")
+        return
+    if not run_git_command(["git", "commit", "-m", "Update README.md with podcast archive link"], cwd=repo_root):
+        print("Failed to commit README.md.")
+        return
+    if not run_git_command(["git", "push", "origin", "main"], cwd=repo_root):
+        print("Failed to push changes to remote.")
+        return
 
+# Calculate the SHA-256 hash of the local chroma_db directory so we can compare it to the remote repo
 def file_hash(filepath):
     """Calculate the SHA-256 hash of the given file."""
     sha256 = hashlib.sha256()
@@ -191,6 +242,7 @@ def file_hash(filepath):
             sha256.update(block)
     return sha256.hexdigest()
 
+# Pull a file from GitHub and save it locally
 def pull_github_file(repo_name, filepath, destination):
     """Pull a file from GitHub and save it locally."""
     headers = {
@@ -207,8 +259,20 @@ def pull_github_file(repo_name, filepath, destination):
     
     print(f"Pulled {filepath} from GitHub and saved to {destination}.")
 
+# Check if the repository has an initial commit
+def has_initial_commit(repo_root):
+    """Check if the repository has an initial commit."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", "HEAD"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True
+    )
+    return result.returncode == 0
+
+# Commit changes to the database directory, HTML file, and new transcribed files
 def commit_database_and_files(repo_root, db_path, history_file, new_files):
-    """Commit changes to the database directory, HTML file, and new podcast files."""
+    """Commit changes to the database directory, HTML file, and new transcribed files."""
     if not os.path.exists(history_file):
         print(f"Error: {history_file} does not exist.")
         return False
@@ -218,11 +282,41 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
         return False
 
     try:
-        # Stash any local changes before pulling
-        subprocess.run(["git", "stash"], cwd=repo_root, check=True)
-        subprocess.run(["git", "pull", "--rebase", "origin", "main"], cwd=repo_root, check=True)
+        # Check if there is an initial commit
+        has_commit = has_initial_commit(repo_root)
+
+        if not has_commit:
+            print("No initial commit found. Creating initial commit.")
+            create_initial_commit(repo_root)
+            # After creating the initial commit, proceed with adding and pushing new files
+
+        # Check for uncommitted changes before stashing
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True
+        ).stdout
+        if status.strip():
+            # Uncommitted changes exist, stash them
+            if not run_git_command(["git", "stash"], cwd=repo_root):
+                print("Failed to stash changes.")
+                return False
+        else:
+            print("No changes to stash.")
+
+        # Pull latest changes
+        if not run_git_command(["git", "pull", "--rebase", "origin", "main"], cwd=repo_root):
+            print("Failed to pull latest changes.")
+            return False
+
         # Try to pop the stash, but continue even if there's nothing to pop
-        result = subprocess.run(["git", "stash", "pop"], cwd=repo_root, check=False, capture_output=True, text=True)
+        result = subprocess.run(
+            ["git", "stash", "pop"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True
+        )
         if result.returncode != 0:
             if "No stash entries found" in result.stderr or "No stash entries found" in result.stdout:
                 print("No stash entries to pop.")
@@ -233,36 +327,79 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
         # Stage the entire ChromaDB database directory
         if db_path:
             print(f"Adding to Git: {os.path.relpath(db_path, repo_root)}")
-            subprocess.run(["git", "add", os.path.relpath(db_path, repo_root)], cwd=repo_root, check=True)
+            if not run_git_command(
+                ["git", "add", os.path.relpath(db_path, repo_root)],
+                cwd=repo_root
+            ):
+                print("Failed to add database directory to Git.")
+                return False
 
         # Stage the HTML file and transcribed folder
         print(f"Adding to Git: {os.path.relpath(history_file, repo_root)}")
-        subprocess.run(["git", "add", os.path.relpath(history_file, repo_root)], cwd=repo_root, check=True)
+        if not run_git_command(
+            ["git", "add", os.path.relpath(history_file, repo_root)],
+            cwd=repo_root
+        ):
+            print("Failed to add history file to Git.")
+            return False
 
         if os.path.exists(TRANSCRIBED_FOLDER):
             print(f"Adding to Git: {os.path.relpath(TRANSCRIBED_FOLDER, repo_root)}")
-            subprocess.run(["git", "add", os.path.relpath(TRANSCRIBED_FOLDER, repo_root)], cwd=repo_root, check=True)
+            if not run_git_command(
+                ["git", "add", os.path.relpath(TRANSCRIBED_FOLDER, repo_root)],
+                cwd=repo_root
+            ):
+                print("Failed to add transcribed folder to Git.")
+                return False
+
+        # Add chroma_hashes.txt to git
+        hash_file = os.path.join(repo_root, 'chroma_hashes.txt')
+        if os.path.exists(hash_file):
+            print(f"Adding to Git: {os.path.relpath(hash_file, repo_root)}")
+            if not run_git_command(
+                ["git", "add", os.path.relpath(hash_file, repo_root)],
+                cwd=repo_root
+            ):
+                print("Failed to add chroma_hashes.txt to Git.")
+                return False
 
         # Debugging: Print git status
-        status_result = subprocess.run(["git", "status"], cwd=repo_root, capture_output=True, text=True)
+        status_result = subprocess.run(
+            ["git", "status"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True
+        )
         print(f"Git status output:\n{status_result.stdout}")
 
         # Check if there are any changes to commit
-        status = subprocess.run(["git", "status", "--porcelain"], cwd=repo_root, capture_output=True, text=True).stdout
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True
+        ).stdout
         if status.strip():
-            subprocess.run(["git", "commit", "-m", "Update database, HTML, and podcast files"], cwd=repo_root, check=True)
-            subprocess.run(["git", "push", "origin", "main"], cwd=repo_root, check=True)
+            if not run_git_command(
+                ["git", "commit", "-m", "Update database, HTML, and podcast files"],
+                cwd=repo_root
+            ):
+                print("Failed to commit changes.")
+                return False
+            if not run_git_command(["git", "push", "origin", "main"], cwd=repo_root):
+                print("Failed to push changes to remote.")
+                return False
             print("Database, HTML, and podcast files committed and pushed.")
             return True
         else:
             print("No changes to commit for the database, HTML, or podcast files.")
             return False
 
-    except subprocess.CalledProcessError as e:
+    except Exception as e:
         print(f"Failed to commit changes: {e}")
         return False
 
-# Database Operations using ChromaDB
+# Add the podcast metadata and transcript to the ChromaDB collection
 def add_podcast_to_db_chroma(metadata, mp3_url, transcript_name, transcript_text):
     global podcast_collection
     metadata['mp3_url'] = mp3_url  # Store the mp3_url in the metadata
@@ -275,6 +412,7 @@ def add_podcast_to_db_chroma(metadata, mp3_url, transcript_name, transcript_text
     )
     print("Data committed to ChromaDB.")
 
+# Generate the HTML file from the ChromaDB collection
 def generate_html_from_chroma_db(history_file):
     global podcast_collection
     """Generate HTML file from ChromaDB collection."""
@@ -309,6 +447,8 @@ def generate_html_from_chroma_db(history_file):
     end_html_log(history_file)
     print(f"HTML generation complete: {history_file}")
 
+
+# Generate SHA-256 hashes for all files in the ChromaDB directory and save them
 def generate_chroma_hashes(db_path, hash_file):
     """Generate SHA-256 hashes for all files in the ChromaDB directory and save them."""
     hashes = []
@@ -322,6 +462,7 @@ def generate_chroma_hashes(db_path, hash_file):
     with open(hash_file, 'w') as f:
         f.write("\n".join(hashes))
 
+# Compare local and remote hash files to determine if pulling is necessary
 def compare_chroma_hashes(local_hash_file, remote_hash_file):
     """Compare local and remote hash files to determine if pulling is necessary."""
     with open(local_hash_file, 'r') as f:
@@ -337,6 +478,24 @@ def compare_chroma_hashes(local_hash_file, remote_hash_file):
         print("Local ChromaDB files differ from remote. Pulling latest from GitHub...")
         return False
 
+# Pull the latest ChromaDB files from the GitHub repository and sync the local database
+def check_and_sync_chromadb(repo_name, db_path, remote_db_dir):
+    """Pull the latest ChromaDB files from the GitHub repository and sync the local database."""
+    print("Syncing ChromaDB from remote repository...")
+    # Pull the latest database files from GitHub
+    if not run_git_command(["git", "fetch", "origin"], cwd=REPO_ROOT):
+        print("Failed to fetch from remote repository.")
+        return False
+
+    # Reset the local database directory to match the remote
+    if not run_git_command(["git", "checkout", f"origin/main", "--", remote_db_dir], cwd=REPO_ROOT):
+        print("Failed to checkout database directory from remote repository.")
+        return False
+
+    print("ChromaDB files synced from remote repository.")
+    return True
+
+# Check if sync is necessary by comparing local and remote hashes
 def pull_and_sync_chromadb_if_necessary(repo_name, db_path, hash_file, remote_db_dir):
     """Check if sync is necessary by comparing local and remote hashes."""
     remote_hash_file = os.path.join(db_path, 'remote_chroma_hashes.txt')
@@ -356,9 +515,10 @@ def pull_and_sync_chromadb_if_necessary(repo_name, db_path, hash_file, remote_db
         print("No sync needed.")
     else:
         check_and_sync_chromadb(repo_name, db_path, remote_db_dir)
-    
+
     os.remove(remote_hash_file)  # Clean up the temporary remote hash file
 
+# Process the RSS feed, download new MP3 files, transcribe them, and store data in ChromaDB
 def process_feed(feed_url, download_folder, history_file, debug=True):
     global podcast_collection
     """Process the RSS feed, download new MP3 files, transcribe them, and store data in ChromaDB."""
@@ -455,18 +615,21 @@ def process_feed(feed_url, download_folder, history_file, debug=True):
 
     return new_files  # Now returns tuples of (mp3_file_path, wav_file_path)
 
-# Date and Name Formatting Functions
+# Format the date to 'Month Day, Year' for TXT files
 def format_date_long(date_str):
     """Format the date to 'Month Day, Year' for TXT files."""
     date_obj = datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S %z")
     return date_obj.strftime("%B %d, %Y")
 
+# Format the date to 'MM/DD/YYYY' for HTML files
 def format_date_short(date_str):
     """Format the date to 'MM/DD/YYYY' for HTML files."""
     date_obj = datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S %z")
     return date_obj.strftime("%m/%d/%Y")
 
+# Extract the podcast and episode titles from the full title
 def extract_podcast_and_episode(title):
+    """Extract the podcast and episode titles from the full title."""
     # Log the title before processing
     print(f"Processing title: {title}")
     
@@ -486,10 +649,12 @@ def extract_podcast_and_episode(title):
     
     return podcast_name, episode_title
 
+# Normalize folder names by replacing spaces with underscores and removing non-alphanumeric characters
 def normalize_folder_name(title):
     """Normalize folder names by replacing spaces with underscores and removing non-alphanumeric characters."""
     return re.sub(r'[^\w\s-]', '', title).replace(" ", "_").strip("_")
 
+# Download the file from the URL and save it to the folder with a readable filename
 def download_file(url, folder, title):
     """Download the file from the URL and save it to the folder with a readable filename."""
     # Ensure the folder exists
@@ -512,6 +677,7 @@ def download_file(url, folder, title):
                 f.write(chunk)
     return mp3_file_path, filename
 
+# Transcribe the audio using Whisper and save to a text file
 def transcribe_with_whisper(file_path, metadata):
     """Transcribe audio using Whisper and save to a text file."""
     wav_file = file_path.replace('.mp3', '.wav')
@@ -557,6 +723,7 @@ def transcribe_with_whisper(file_path, metadata):
         print(f"Error during transcription: {e}")
         return None, None
 
+# Organize podcast transcript files into folders and return the new file path
 def organize_podcast_files(podcast_name, episode_title, transcript_file):
     """Organize podcast transcript files into folders and return the new file path."""
     normalized_podcast_name = normalize_folder_name(podcast_name)
@@ -573,7 +740,7 @@ def organize_podcast_files(podcast_name, episode_title, transcript_file):
 
     return new_transcript_path
 
-# HTML Operations
+# Initialize the PodcastHistory file with a header, if it does not exist
 def start_html_log(history_file):
     """Initialize the PodcastHistory file with a header, if it does not exist."""
     header = """
@@ -694,6 +861,7 @@ def start_html_log(history_file):
     with open(history_file, "w") as f:
         f.write(header)
 
+# Add a footer to the PodcastHistory file
 def end_html_log(history_file):
     """Finalize the PodcastHistory file with a footer."""
     footer = """
@@ -704,6 +872,7 @@ def end_html_log(history_file):
     with open(history_file, "a") as f:
         f.write(footer)
 
+# Save the downloaded URL and metadata to the PodcastHistory file
 def save_downloaded_url(history_file, metadata, transcript_name):
     """Save the downloaded URL and metadata to the PodcastHistory file."""
     print(f"Saving to HTML: {metadata['episode_title']}")
@@ -729,6 +898,7 @@ def save_downloaded_url(history_file, metadata, transcript_name):
     with open(history_file, "a") as f:
         f.write(entry)
 
+# Update the HTML file links to point to the appropriate locations, if necessary
 def update_html_links(history_file):
     """Update HTML file links to point to the appropriate locations, if necessary."""
     with open(history_file, 'r+') as f:
@@ -743,6 +913,7 @@ def update_html_links(history_file):
         f.write(content)
         f.truncate()
 
+# Check if Whisper is installed by verifying the existence of key files
 def check_whisper_installed():
     """Check if Whisper is installed by verifying the existence of key files."""
     whisper_exec = os.path.expanduser(WHISPER_EXECUTABLE)
@@ -756,7 +927,7 @@ def check_whisper_installed():
         print("Whisper is not fully installed.")
         return False
 
-# Main Script Execution
+# Main script execution
 if __name__ == "__main__":
     print("Starting podcast transcription process...")
     
@@ -810,9 +981,16 @@ if __name__ == "__main__":
                 os.remove(wav_file)
                 print(f"Deleted WAV file: {wav_file}")
 
-    subprocess.run(["git", "fetch", "origin"], cwd=REPO_ROOT, check=True)
-    subprocess.run(["git", "reset", "--hard", "origin/main"], cwd=REPO_ROOT, check=True)
-    print("Final fetch and reset to sync with remote completed.")
+    try:
+        subprocess.run(["git", "fetch", "origin"], cwd=REPO_ROOT, check=True)
+        # Check if origin/main exists before resetting
+        result = subprocess.run(["git", "rev-parse", "--verify", "origin/main"], cwd=REPO_ROOT, capture_output=True, text=True)
+        if result.returncode == 0:
+            subprocess.run(["git", "reset", "--hard", "origin/main"], cwd=REPO_ROOT, check=True)
+        else:
+            print("origin/main does not exist. Skipping git reset.")
+    except subprocess.CalledProcessError as e:
+        print(f"Git command failed: {e}")
 
     if ENABLE_GITHUB_PAGES:
         enable_github_pages()
