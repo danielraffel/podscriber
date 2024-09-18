@@ -380,7 +380,7 @@ def process_feed(feed_url, download_folder, history_file, debug=True):
 
     root = ET.fromstring(response.content)
 
-    new_files = []
+    new_files = []  # This will now store tuples of (mp3_file_path, wav_file_path)
 
     for item in root.findall('./channel/item')[:DEBUG_MODE_LIMIT]:
         full_title = item.find('title').text
@@ -427,20 +427,24 @@ def process_feed(feed_url, download_folder, history_file, debug=True):
                     continue
 
                 try:
+                    # Download the MP3 file
                     mp3_file_path, filename = download_file(mp3_url, download_folder, full_title)
-                    transcript_file, transcript_text = transcribe_with_whisper(mp3_file_path, metadata)
                     
+                    # Transcribe using Whisper
+                    transcript_file, transcript_text = transcribe_with_whisper(mp3_file_path, metadata)
+
                     # Organize the transcript file and get the new path
                     new_transcript_path = organize_podcast_files(podcast_name, episode_title, transcript_file)
 
-                    # Update new_files list with the correct path
-                    new_files.append(new_transcript_path)
-
                     if debug:
                         print(f"Organized file: Transcript={new_transcript_path}")
-                    
+
                     # Save podcast metadata into the ChromaDB, including transcript text
                     add_podcast_to_db_chroma(metadata, mp3_url, os.path.basename(new_transcript_path), transcript_text)
+
+                    # Add both the MP3 and WAV file paths to new_files for deletion later
+                    wav_file = mp3_file_path.replace('.mp3', '.wav')
+                    new_files.append((mp3_file_path, wav_file))  # Append tuple with MP3 and WAV paths
 
                     if debug:
                         print(f"Downloaded, transcribed, and saved: {mp3_url} as {filename} with transcript {new_transcript_path}")
@@ -459,7 +463,7 @@ def process_feed(feed_url, download_folder, history_file, debug=True):
     else:
         print("No new podcasts found, skipping HTML generation.")
 
-    return new_files
+    return new_files  # Now returns tuples of (mp3_file_path, wav_file_path)
 
 # Date and Name Formatting Functions
 def format_date_long(date_str):
@@ -802,15 +806,13 @@ if __name__ == "__main__":
    
     finally:
         # Always attempt to delete MP3 and WAV files after processing
-        for file_path in new_files:
-            base_file = os.path.join(PODCAST_AUDIO_FOLDER, os.path.basename(file_path).replace(".txt", ".mp3"))
-            wav_file = base_file.replace(".mp3", ".wav")
-            if os.path.exists(base_file):
-                os.remove(base_file)
-                print(f"Deleted file: {base_file}")
+        for mp3_file, wav_file in new_files:
+            if os.path.exists(mp3_file):
+                os.remove(mp3_file)
+                print(f"Deleted MP3 file: {mp3_file}")
             if os.path.exists(wav_file):
                 os.remove(wav_file)
-                print(f"Deleted file: {wav_file}")
+                print(f"Deleted WAV file: {wav_file}")
 
     subprocess.run(["git", "fetch", "origin"], cwd=REPO_ROOT, check=True)
     subprocess.run(["git", "reset", "--hard", "origin/main"], cwd=REPO_ROOT, check=True)
