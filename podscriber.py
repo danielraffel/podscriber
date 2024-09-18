@@ -171,6 +171,10 @@ def check_github_pages_enabled():
 # Enable GitHub Pages for the repository and update the README.md with the PODCAST_HISTORY_FILE link
 def enable_github_pages():
     """Enable GitHub Pages for the repository."""
+    # Construct the URL to the podcast archive
+    history_filename = os.path.basename(PODCAST_HISTORY_FILE)
+    archive_url = f"https://{GITHUB_USERNAME}.github.io/{GITHUB_REPO_NAME}/{history_filename}"
+
     if check_github_pages_enabled():
         print(f"GitHub Pages is already enabled for {GITHUB_REPO_NAME}.")
         print(f"Visit your site at: {archive_url}")
@@ -191,9 +195,6 @@ def enable_github_pages():
     
     response = requests.post(url, headers=headers, json=data)
     if response.status_code in [201, 204]:
-        # Construct the URL to the podcast archive
-        history_filename = os.path.basename(PODCAST_HISTORY_FILE)
-        archive_url = f"https://{GITHUB_USERNAME}.github.io/{GITHUB_REPO_NAME}/{history_filename}"
         print(f"GitHub Pages enabled for repository {GITHUB_REPO_NAME}.")
         print(f"Visit your site at: {archive_url}")
         
