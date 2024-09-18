@@ -762,66 +762,38 @@ def start_html_log(history_file):
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Podcast &#x1F442; Archive</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        th {
-            background-color: #4a90e2;
-            color: white;
-            font-weight: 600;
-            text-align: left;
-            padding: 16px;
-            text-transform: uppercase;
-            font-size: 14px;
-            letter-spacing: 0.5px;
-        }
-        td {
-            padding: 16px;
-            border-bottom: 1px solid #e0e0e0;
-        }
-        tr:last-child td {
-            border-bottom: none;
-        }
-        tr:nth-child(even) {
-            background-color: #f9f9f9;
-        }
-        tr:hover {
-            background-color: #f0f0f0;
-            transition: background-color 0.3s ease;
-        }
-        a {
-            color: #2c3e50;
-            text-decoration: none;
-            border-bottom: 1px solid #3498db;
-            transition: color 0.3s ease, border-bottom-color 0.3s ease;
-        }
-
-        a:hover {
-            color: #3498db;
-            border-bottom-color: #2c3e50;
-        }
-
-        a.no-underline {
-            text-decoration: none;
-            border-bottom: none; /* Removes the border underline */
-        }
-
-        a.no-underline:hover {
-            text-decoration: none;
-            border-bottom: none; /* Ensures no underline on hover as well */
-        }
-        h2 {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
+        /* Optional: Custom styles can go here */
     </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto p-4">
+        <h2 class="text-3xl font-bold mb-4">Podcast &#x1F442; Archive</h2>
+        <table id="podcastTable" class="min-w-full bg-white shadow-md rounded-lg overflow-hidden">
+            <thead>
+                <tr class="bg-blue-500 text-white uppercase text-sm leading-normal">
+                    <th class="py-3 px-6 text-left">Podcast</th>
+                    <th class="py-3 px-6 text-left">Episode</th>
+                    <th class="py-3 px-6 text-left">Listen Date</th>
+                    <th class="py-3 px-6 text-left">Transcript</th>
+                    <th class="py-3 px-6 text-left">Stream</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-600 text-sm font-light">
+                """
+    with open(history_file, "w") as f:
+        f.write(header)
+
+# Add a footer to the PodcastHistory file
+def end_html_log(history_file):
+    """Finalize the PodcastHistory file with a footer."""
+    footer = """
+            </tbody>
+        </table>
+    </div>
     <script>
         function sortTable(n) {
           var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
@@ -860,26 +832,6 @@ def start_html_log(history_file):
           }
         }
     </script>
-</head>
-<body>
-    <h2>Podcast &#x1F442; Archive</h2>
-    <table id="podcastTable">
-        <tr>
-            <th onclick="sortTable(0)">Podcast</th>
-            <th onclick="sortTable(1)">Episode</th>
-            <th onclick="sortTable(2)">Listen Date</th>
-            <th>Transcript</th>
-            <th>Stream</th>
-        </tr>
-        """
-    with open(history_file, "w") as f:
-        f.write(header)
-
-# Add a footer to the PodcastHistory file
-def end_html_log(history_file):
-    """Finalize the PodcastHistory file with a footer."""
-    footer = """
-    </table>
 </body>
 </html>
     """
@@ -895,18 +847,15 @@ def save_downloaded_url(history_file, metadata, transcript_name):
     transcript_github_url = f"https://raw.githubusercontent.com/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/main/transcribed/{normalize_folder_name(metadata['podcast_name'])}/{transcript_name}"
     
     # Handle case where link might be None or empty
-    if metadata.get('link'):
-        pod_site_link = f"<a href=\"{html.escape(metadata['link'])}\" target=\"_blank\">Pod Site</a>"
-    else:
-        pod_site_link = "N/A"
+    pod_site_link = f"<a href=\"{html.escape(metadata.get('link', ''))}\" target=\"_blank\">Pod Site</a>" if metadata.get('link') else "N/A"
     
     entry = f"""
-<tr>
-    <td><a href="{html.escape(metadata.get('link', ''))}" target="_blank">{html.escape(metadata['podcast_name'])}</a></td>
-    <td><a href="{html.escape(metadata['guid'])}" target="_blank">{html.escape(metadata['episode_title'])}</a></td>
-    <td>{html.escape(format_date_short(metadata['listenDate']))}</td>
-    <td><a href="{transcript_github_url}" target="_blank" class="no-underline">&#x1F4C4;</a></td>
-    <td><audio src="{metadata['mp3_url']}" controls></audio></td>
+<tr class="hover:bg-gray-100">
+    <td class="py-4 px-6 border-b text-lg"><a href="{html.escape(metadata['link'])}" target="_blank" class="text-blue-600 hover:underline">{html.escape(metadata['podcast_name'])}</a></td>
+    <td class="py-4 px-6 border-b text-lg"><a href="{html.escape(metadata['guid'])}" target="_blank" class="text-blue-600 hover:underline">{html.escape(metadata['episode_title'])}</a></td>
+    <td class="py-4 px-6 border-b text-lg">{html.escape(format_date_short(metadata['listenDate']))}</td>
+    <td class="py-4 px-6 border-b text-lg"><a href="{transcript_github_url}" target="_blank" class="text-blue-500 text-lg">&#x1F4C4;</a></td>
+    <td class="py-4 px-6 border-b text-lg"><audio src="{metadata['mp3_url']}" controls class="w-8 h-8"></audio></td>
 </tr>
     """
     with open(history_file, "a") as f:
