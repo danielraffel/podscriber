@@ -173,6 +173,7 @@ def enable_github_pages():
     """Enable GitHub Pages for the repository."""
     if check_github_pages_enabled():
         print(f"GitHub Pages is already enabled for {GITHUB_REPO_NAME}.")
+        print(f"Visit your site at: {archive_url}")
         return
 
     headers = {
@@ -324,6 +325,9 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
                 print(f"Error during git stash pop: {result.stderr}")
                 return False
 
+        # Proceed to add and commit files as before
+        # [Rest of the code remains the same]
+
         # Stage the entire ChromaDB database directory
         if db_path:
             print(f"Adding to Git: {os.path.relpath(db_path, repo_root)}")
@@ -334,7 +338,7 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
                 print("Failed to add database directory to Git.")
                 return False
 
-        # Stage the HTML file and transcribed folder
+        # Stage the HTML file
         print(f"Adding to Git: {os.path.relpath(history_file, repo_root)}")
         if not run_git_command(
             ["git", "add", os.path.relpath(history_file, repo_root)],
@@ -343,6 +347,7 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
             print("Failed to add history file to Git.")
             return False
 
+        # Stage the transcribed folder if it exists
         if os.path.exists(TRANSCRIBED_FOLDER):
             print(f"Adding to Git: {os.path.relpath(TRANSCRIBED_FOLDER, repo_root)}")
             if not run_git_command(
@@ -352,7 +357,7 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
                 print("Failed to add transcribed folder to Git.")
                 return False
 
-        # Add chroma_hashes.txt to git
+        # Stage the updated chroma_hashes.txt file
         hash_file = os.path.join(repo_root, 'chroma_hashes.txt')
         if os.path.exists(hash_file):
             print(f"Adding to Git: {os.path.relpath(hash_file, repo_root)}")
@@ -447,35 +452,43 @@ def generate_html_from_chroma_db(history_file):
     end_html_log(history_file)
     print(f"HTML generation complete: {history_file}")
 
-
 # Generate SHA-256 hashes for all files in the ChromaDB directory and save them
-def generate_chroma_hashes(db_path, hash_file):
+def generate_chroma_hashes(db_path, repo_root, hash_file):
     """Generate SHA-256 hashes for all files in the ChromaDB directory and save them."""
     hashes = []
     for root, dirs, files in os.walk(db_path):
         for file in files:
             file_path = os.path.join(root, file)
-            file_rel_path = os.path.relpath(file_path, db_path)
+            # Generate a path relative to the repository root
+            file_rel_path = os.path.relpath(file_path, repo_root).replace('\\', '/')
             file_hash_value = file_hash(file_path)
             hashes.append(f"{file_rel_path}:{file_hash_value}")
-    
-    with open(hash_file, 'w') as f:
+    # Sort the hashes to ensure consistent order
+    hashes.sort()
+    with open(hash_file, 'w', newline='\n') as f:
         f.write("\n".join(hashes))
+    print(f"ChromaDB hashes generated and saved to {hash_file}.")
 
 # Compare local and remote hash files to determine if pulling is necessary
 def compare_chroma_hashes(local_hash_file, remote_hash_file):
     """Compare local and remote hash files to determine if pulling is necessary."""
     with open(local_hash_file, 'r') as f:
-        local_hashes = set(f.readlines())
-    
+        local_hashes = set(line.strip() for line in f)
     with open(remote_hash_file, 'r') as f:
-        remote_hashes = set(f.readlines())
-    
+        remote_hashes = set(line.strip() for line in f)
     if local_hashes == remote_hashes:
         print("Local ChromaDB files are up-to-date.")
         return True
     else:
-        print("Local ChromaDB files differ from remote. Pulling latest from GitHub...")
+        print("Local ChromaDB files differ from remote.")
+        # Debugging: Print the differences
+        print("Differences:")
+        print("In local but not in remote:")
+        for line in local_hashes - remote_hashes:
+            print(line)
+        print("In remote but not in local:")
+        for line in remote_hashes - local_hashes:
+            print(line)
         return False
 
 # Pull the latest ChromaDB files from the GitHub repository and sync the local database
@@ -498,7 +511,7 @@ def check_and_sync_chromadb(repo_name, db_path, remote_db_dir):
 # Check if sync is necessary by comparing local and remote hashes
 def pull_and_sync_chromadb_if_necessary(repo_name, db_path, hash_file, remote_db_dir):
     """Check if sync is necessary by comparing local and remote hashes."""
-    remote_hash_file = os.path.join(db_path, 'remote_chroma_hashes.txt')
+    remote_hash_file = os.path.join(REPO_ROOT, 'remote_chroma_hashes.txt')
 
     # Check if the remote hash file exists
     try:
@@ -956,13 +969,16 @@ if __name__ == "__main__":
 
     # Generate and compare hashes before syncing
     hash_file = os.path.join(REPO_ROOT, 'chroma_hashes.txt')
-    generate_chroma_hashes(CHROMADB_DB_PATH, hash_file)
-    
+    generate_chroma_hashes(CHROMADB_DB_PATH, REPO_ROOT, hash_file)
+
     pull_and_sync_chromadb_if_necessary(GITHUB_REPO_NAME, CHROMADB_DB_PATH, hash_file, os.path.relpath(CHROMADB_DB_PATH, REPO_ROOT))
 
     try:
         new_files = process_feed(RSS_FEED_URL, PODCAST_AUDIO_FOLDER, PODCAST_HISTORY_FILE, debug=True)
         print("RSS feed processing completed.")
+
+        # Regenerate the chroma hashes after updating the database
+        generate_chroma_hashes(CHROMADB_DB_PATH, REPO_ROOT, hash_file)
 
         if ENABLE_GITHUB_COMMIT:
             upload_successful = commit_database_and_files(REPO_ROOT, CHROMADB_DB_PATH, PODCAST_HISTORY_FILE, new_files)
@@ -994,6 +1010,5 @@ if __name__ == "__main__":
 
     if ENABLE_GITHUB_PAGES:
         enable_github_pages()
-        print("GitHub Pages enabled.")
 
     print("Script completed successfully.")
