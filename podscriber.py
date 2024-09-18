@@ -28,18 +28,6 @@ PODCAST_HISTORY_FILE = os.path.expanduser(PODCAST_HISTORY_FILE)
 TRANSCRIBED_FOLDER = os.path.join(REPO_ROOT, "transcribed")
 CHROMADB_DB_PATH = os.path.expanduser(CHROMADB_DB_PATH)
 
-# Setup ChromaDB Persistent Client
-client = chromadb.PersistentClient(path=CHROMADB_DB_PATH)
-
-# Access the podcasts collection
-podcast_collection = client.get_or_create_collection(name="podcasts")
-
-# Check the heartbeat to ensure connection
-client.heartbeat()
-
-# Example usage of resetting the database if necessary (destructive)
-# client.reset()
-
 def check_git_installed():
     """Ensure git is installed on the system."""
     try:
@@ -97,27 +85,26 @@ def is_git_repo(repo_root):
 def initialize_local_git_repo(repo_root):
     """Initialize the local Git repository or pull changes if it already exists."""
     if not os.path.exists(repo_root):
-        os.makedirs(repo_root)
-
-    if not is_git_repo(repo_root):
-        print(f"Initializing local Git repository in {repo_root}...")
-        subprocess.run(["git", "init"], cwd=repo_root, check=True)
-        subprocess.run(["git", "remote", "add", "origin", f"git@github.com:{GITHUB_USERNAME}/{GITHUB_REPO_NAME}.git"], cwd=repo_root, check=True)
-
-        # Check if the remote has any commits
-        result = subprocess.run(["git", "ls-remote", "--heads", "origin"], cwd=repo_root, capture_output=True, text=True)
-
-        if result.stdout.strip():
-            # Remote repository has commits, pull them
-            subprocess.run(["git", "pull", "origin", "main"], cwd=repo_root, check=True)
-            print("Pulled existing main branch from remote.")
-        else:
-            # Remote is empty, create initial commit and push
-            create_initial_commit(repo_root)
-            print("Created and pushed initial commit to main branch.")
+        print(f"Cloning repository into {repo_root}...")
+        subprocess.run(["git", "clone", f"git@github.com:{GITHUB_USERNAME}/{GITHUB_REPO_NAME}.git", repo_root], check=True)
     else:
-        print(f"Git repository already initialized in {repo_root}, pulling latest changes.")
-        subprocess.run(["git", "pull", "origin", "main"], cwd=repo_root, check=True)
+        if is_git_repo(repo_root):
+            print(f"Git repository already initialized in {repo_root}, pulling latest changes.")
+            subprocess.run(["git", "pull", "origin", "main"], cwd=repo_root, check=True)
+        else:
+            print(f"Directory {repo_root} exists but is not a git repository. Initializing as git repository.")
+            subprocess.run(["git", "init"], cwd=repo_root, check=True)
+            subprocess.run(["git", "remote", "add", "origin", f"git@github.com:{GITHUB_USERNAME}/{GITHUB_REPO_NAME}.git"], cwd=repo_root, check=True)
+            # Check if the remote has any commits
+            result = subprocess.run(["git", "ls-remote", "--heads", "origin"], cwd=repo_root, capture_output=True, text=True)
+            if result.stdout.strip():
+                # Remote repository has commits, pull them
+                subprocess.run(["git", "pull", "origin", "main"], cwd=repo_root, check=True)
+                print("Pulled existing main branch from remote.")
+            else:
+                # Remote is empty, create initial commit and push
+                create_initial_commit(repo_root)
+                print("Created and pushed initial commit to main branch.")
 
 def create_initial_commit(repo_root):
     """Create the initial commit in the local Git repository."""
@@ -277,6 +264,7 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
 
 # Database Operations using ChromaDB
 def add_podcast_to_db_chroma(metadata, mp3_url, transcript_name, transcript_text):
+    global podcast_collection
     metadata['mp3_url'] = mp3_url  # Store the mp3_url in the metadata
     document = f"{metadata['podcast_name']} - {metadata['episode_title']}\nTranscript: {transcript_text}"
     
@@ -288,6 +276,7 @@ def add_podcast_to_db_chroma(metadata, mp3_url, transcript_name, transcript_text
     print("Data committed to ChromaDB.")
 
 def generate_html_from_chroma_db(history_file):
+    global podcast_collection
     """Generate HTML file from ChromaDB collection."""
     print(f"Generating HTML from ChromaDB")
     
@@ -371,6 +360,7 @@ def pull_and_sync_chromadb_if_necessary(repo_name, db_path, hash_file, remote_db
     os.remove(remote_hash_file)  # Clean up the temporary remote hash file
 
 def process_feed(feed_url, download_folder, history_file, debug=True):
+    global podcast_collection
     """Process the RSS feed, download new MP3 files, transcribe them, and store data in ChromaDB."""
     if debug:
         print(f"Fetching feed from {feed_url}")
@@ -787,6 +777,12 @@ if __name__ == "__main__":
     # Initialize the local Git repository
     initialize_local_git_repo(REPO_ROOT)
     
+    # Initialize ChromaDB after Git repository is synchronized
+    global client, podcast_collection
+    client = chromadb.PersistentClient(path=CHROMADB_DB_PATH)
+    podcast_collection = client.get_or_create_collection(name="podcasts")
+    client.heartbeat()
+
     # Generate and compare hashes before syncing
     hash_file = os.path.join(REPO_ROOT, 'chroma_hashes.txt')
     generate_chroma_hashes(CHROMADB_DB_PATH, hash_file)
