@@ -16,7 +16,8 @@ from config import (
     GITHUB_REPO_NAME, ENABLE_GITHUB_COMMIT, UPDATE_HTML_LINKS,
     GITHUB_USERNAME, GITHUB_TOKEN, GITHUB_REPO_PRIVATE, DEBUG_MODE_LIMIT, 
     REPO_ROOT, ENABLE_GITHUB_PAGES,
-    WHISPER_SETUP, WHISPER_ROOT,CHROMADB_DB_PATH, TOKENIZERS_PARALLELISM
+    WHISPER_SETUP, WHISPER_ROOT,CHROMADB_DB_PATH, TOKENIZERS_PARALLELISM,
+    USE_EXISTING_DATA
 )
 
 # Set Hugging Face Tokenizers environment variable
@@ -536,6 +537,13 @@ def pull_and_sync_chromadb_if_necessary(repo_name, db_path, hash_file, remote_db
 def process_feed(feed_url, download_folder, history_file, debug=True):
     global podcast_collection
     """Process the RSS feed, download new MP3 files, transcribe them, and store data in ChromaDB."""
+    
+    if USE_EXISTING_DATA and os.path.exists(CHROMADB_DB_PATH) and os.path.exists(TRANSCRIBED_FOLDER):
+        print("Using existing ChromaDB and transcript data.")
+        # Skip fetching RSS feed and directly generate HTML
+        generate_html_from_chroma_db(history_file)
+        return []  # No new files to delete
+
     if debug:
         print(f"Fetching feed from {feed_url}")
     
@@ -546,7 +554,10 @@ def process_feed(feed_url, download_folder, history_file, debug=True):
 
     new_files = []  # This will now store tuples of (mp3_file_path, wav_file_path)
 
-    for item in root.findall('./channel/item')[:DEBUG_MODE_LIMIT]:
+    # Adjust the limit for the first run if no existing data
+    limit = 1 if not os.path.exists(CHROMADB_DB_PATH) else DEBUG_MODE_LIMIT
+
+    for item in root.findall('./channel/item')[:limit]:
         full_title = item.find('title').text
         pubDate = item.find('pubDate').text
         guid = item.find('guid').text
