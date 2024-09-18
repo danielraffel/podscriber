@@ -38,7 +38,7 @@ DEBUG_MODE_LIMIT = None  # Set this to limit the number of files to download dur
 
 # When set to True, this overrides DEBUG_MODE_LIMIT. It is used for developing faster by using existing ChromaDB and transcribed text files.
 # It will only download 1 item from the RSS feed if there is no existing data in ChromaDB otherwise it will use the existing data.
-USE_EXISTING_DATA = True  # Set to True to use existing ChromaDB and transcript data, False to fetch new data from the RSS feed.
+USE_EXISTING_DATA = False  # Set to True to use existing ChromaDB and transcript data, False to fetch new data from the RSS feed.
 
 # Instructions for setting up GitHub Token
 # 1. Go to https://github.com/settings/tokens and create a new Personal Access Token with just the `repo` scope.
