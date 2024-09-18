@@ -15,8 +15,11 @@ from config import (
     GITHUB_REPO_NAME, ENABLE_GITHUB_COMMIT, UPDATE_HTML_LINKS,
     GITHUB_USERNAME, GITHUB_TOKEN, GITHUB_REPO_PRIVATE, DEBUG_MODE_LIMIT, 
     REPO_ROOT, ENABLE_GITHUB_PAGES,
-    WHISPER_SETUP, WHISPER_ROOT,CHROMADB_DB_PATH
+    WHISPER_SETUP, WHISPER_ROOT,CHROMADB_DB_PATH, TOKENIZERS_PARALLELISM
 )
+
+# Set Hugging Face Tokenizers environment variable
+os.environ["TOKENIZERS_PARALLELISM"] = TOKENIZERS_PARALLELISM
 
 # Configuration and Constants
 REPO_ROOT = os.path.expanduser(REPO_ROOT)
@@ -87,37 +90,44 @@ def check_create_github_repo(repo_name):
     else:
         print(f"Repository {repo_name} exists.")
 
+def is_git_repo(repo_root):
+    """Check if the directory is a Git repository."""
+    return os.path.exists(os.path.join(repo_root, ".git"))
+
 def initialize_local_git_repo(repo_root):
-    """Initialize the local Git repository, check for existing database and pull it."""
+    """Initialize the local Git repository or pull changes if it already exists."""
     if not os.path.exists(repo_root):
         os.makedirs(repo_root)
-    
-    if not os.path.exists(os.path.join(repo_root, ".git")):
+
+    if not is_git_repo(repo_root):
         print(f"Initializing local Git repository in {repo_root}...")
         subprocess.run(["git", "init"], cwd=repo_root, check=True)
         subprocess.run(["git", "remote", "add", "origin", f"git@github.com:{GITHUB_USERNAME}/{GITHUB_REPO_NAME}.git"], cwd=repo_root, check=True)
 
         # Check if the remote has any commits
-        result = subprocess.run(["git", "ls-remote", "--exit-code", "origin", "main"], cwd=repo_root, capture_output=True, text=True)
-        
-        if result.returncode == 0:
-            # Remote main branch exists, pull it
+        result = subprocess.run(["git", "ls-remote", "--heads", "origin"], cwd=repo_root, capture_output=True, text=True)
+
+        if result.stdout.strip():
+            # Remote repository has commits, pull them
             subprocess.run(["git", "pull", "origin", "main"], cwd=repo_root, check=True)
             print("Pulled existing main branch from remote.")
         else:
             # Remote is empty, create initial commit and push
-            with open(os.path.join(repo_root, "README.md"), "w") as f:
-                f.write(f"# {GITHUB_REPO_NAME}\n\nThis repository contains podcast archives.")
-            
-            subprocess.run(["git", "add", "README.md"], cwd=repo_root, check=True)
-            subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_root, check=True)
-            subprocess.run(["git", "branch", "-M", "main"], cwd=repo_root, check=True)
-            subprocess.run(["git", "push", "-u", "origin", "main"], cwd=repo_root, check=True)
+            create_initial_commit(repo_root)
             print("Created and pushed initial commit to main branch.")
-        
-        print("Local Git repository initialized.")
     else:
-        print("Git repository already initialized.")
+        print(f"Git repository already initialized in {repo_root}, pulling latest changes.")
+        subprocess.run(["git", "pull", "origin", "main"], cwd=repo_root, check=True)
+
+def create_initial_commit(repo_root):
+    """Create the initial commit in the local Git repository."""
+    with open(os.path.join(repo_root, "README.md"), "w") as f:
+        f.write(f"# {GITHUB_REPO_NAME}\n\nThis repository contains podcast archives.")
+
+    subprocess.run(["git", "add", "README.md"], cwd=repo_root, check=True)
+    subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_root, check=True)
+    subprocess.run(["git", "branch", "-M", "main"], cwd=repo_root, check=True)
+    subprocess.run(["git", "push", "-u", "origin", "main"], cwd=repo_root, check=True)
 
 def check_github_pages_enabled():
     """Check if GitHub Pages is already enabled."""
@@ -224,24 +234,31 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
         # Stash any local changes before pulling
         subprocess.run(["git", "stash"], cwd=repo_root, check=True)
         subprocess.run(["git", "pull", "--rebase", "origin", "main"], cwd=repo_root, check=True)
-        subprocess.run(["git", "stash", "pop"], cwd=repo_root, check=True)
+        # Try to pop the stash, but continue even if there's nothing to pop
+        result = subprocess.run(["git", "stash", "pop"], cwd=repo_root, check=False, capture_output=True, text=True)
+        if result.returncode != 0:
+            if "No stash entries found" in result.stderr or "No stash entries found" in result.stdout:
+                print("No stash entries to pop.")
+            else:
+                print(f"Error during git stash pop: {result.stderr}")
+                return False
 
         # Stage the entire ChromaDB database directory
         if db_path:
+            print(f"Adding to Git: {os.path.relpath(db_path, repo_root)}")
             subprocess.run(["git", "add", os.path.relpath(db_path, repo_root)], cwd=repo_root, check=True)
 
         # Stage the HTML file and transcribed folder
+        print(f"Adding to Git: {os.path.relpath(history_file, repo_root)}")
         subprocess.run(["git", "add", os.path.relpath(history_file, repo_root)], cwd=repo_root, check=True)
-        
+
         if os.path.exists(TRANSCRIBED_FOLDER):
+            print(f"Adding to Git: {os.path.relpath(TRANSCRIBED_FOLDER, repo_root)}")
             subprocess.run(["git", "add", os.path.relpath(TRANSCRIBED_FOLDER, repo_root)], cwd=repo_root, check=True)
-        
-        # Stage new podcast files (if any)
-        for file in new_files:
-            if os.path.exists(file):
-                subprocess.run(["git", "add", os.path.relpath(file, repo_root)], cwd=repo_root, check=True)
-            else:
-                print(f"Warning: File {file} does not exist and will not be committed.")
+
+        # Debugging: Print git status
+        status_result = subprocess.run(["git", "status"], cwd=repo_root, capture_output=True, text=True)
+        print(f"Git status output:\n{status_result.stdout}")
 
         # Check if there are any changes to commit
         status = subprocess.run(["git", "status", "--porcelain"], cwd=repo_root, capture_output=True, text=True).stdout
@@ -278,15 +295,12 @@ def generate_html_from_chroma_db(history_file):
     start_html_log(history_file)
     
     # Retrieve all documents in the collection
-    results = podcast_collection.query(
-        query_texts=[""],  # Empty query to retrieve all documents
-        n_results=1000     # Assume a large enough number to get all results
-    )
+    results = podcast_collection.get()
 
     if 'documents' in results and len(results['documents']) > 0:
-        documents = results['documents'][0]
-        ids = results['ids'][0]
-        metadatas = results.get('metadatas', [{}])[0]
+        documents = results['documents']
+        ids = results['ids']
+        metadatas = results.get('metadatas', [])
     else:
         print("No documents found in ChromaDB.")
         return
@@ -403,23 +417,9 @@ def process_feed(feed_url, download_folder, history_file, debug=True):
                     "link": link if link else ""
                 }
                 
-                # Retrieve all documents and filter by 'guid'
-                existing_docs = podcast_collection.get()
-
-                # Debugging: Print out existing_docs to understand its structure
-                print(f"Existing documents retrieved from ChromaDB: {existing_docs}")
-
-                # Ensure 'documents' and 'metadatas' exist in the structure
-                if 'documents' in existing_docs and 'metadatas' in existing_docs:
-                    # Iterate over each document and its corresponding metadata
-                    already_processed = False
-                    for doc_metadata in existing_docs['metadatas']:
-                        if doc_metadata.get('guid') == guid:
-                            already_processed = True
-                            break
-                else:
-                    print(f"Unexpected structure of existing_docs: {existing_docs}")
-                    already_processed = False
+                # Check if the guid already exists in the collection
+                existing_doc = podcast_collection.get(ids=[guid])
+                already_processed = len(existing_doc['ids']) > 0
 
                 if already_processed:
                     if debug:
@@ -459,6 +459,8 @@ def process_feed(feed_url, download_folder, history_file, debug=True):
     else:
         print("No new podcasts found, skipping HTML generation.")
 
+    return new_files
+
 # Date and Name Formatting Functions
 def format_date_long(date_str):
     """Format the date to 'Month Day, Year' for TXT files."""
@@ -496,6 +498,10 @@ def normalize_folder_name(title):
 
 def download_file(url, folder, title):
     """Download the file from the URL and save it to the folder with a readable filename."""
+    # Ensure the folder exists
+    if not os.path.exists(folder):
+        os.makedirs(folder, exist_ok=True)
+    
     filename = re.sub(r'[^\w\s-]', '', title).replace(" ", "_").strip("_")
     
     # Ensure the filename ends with '.mp3'
@@ -515,6 +521,10 @@ def download_file(url, folder, title):
 def transcribe_with_whisper(file_path, metadata):
     """Transcribe audio using Whisper and save to a text file."""
     wav_file = file_path.replace('.mp3', '.wav')
+    
+    # Ensure the TRANSCRIBED_FOLDER exists before any file writing
+    if not os.path.exists(TRANSCRIBED_FOLDER):
+        os.makedirs(TRANSCRIBED_FOLDER, exist_ok=True)
     
     try:
         # Convert mp3 to wav using ffmpeg
@@ -560,6 +570,7 @@ def organize_podcast_files(podcast_name, episode_title, transcript_file):
 
     podcast_folder = os.path.join(TRANSCRIBED_FOLDER, normalized_podcast_name)
 
+    # Ensure the podcast folder exists before attempting to move the file
     if not os.path.exists(podcast_folder):
         os.makedirs(podcast_folder, exist_ok=True)
 
@@ -768,6 +779,9 @@ if __name__ == "__main__":
     if GITHUB_REPO_CHECK:
         check_create_github_repo(GITHUB_REPO_NAME)
         print("GitHub repository check completed.")
+
+    # Initialize the local Git repository
+    initialize_local_git_repo(REPO_ROOT)
     
     # Generate and compare hashes before syncing
     hash_file = os.path.join(REPO_ROOT, 'chroma_hashes.txt')
@@ -776,10 +790,9 @@ if __name__ == "__main__":
     pull_and_sync_chromadb_if_necessary(GITHUB_REPO_NAME, CHROMADB_DB_PATH, hash_file, os.path.relpath(CHROMADB_DB_PATH, REPO_ROOT))
 
     try:
-        new_files = []
-        process_feed(RSS_FEED_URL, PODCAST_AUDIO_FOLDER, PODCAST_HISTORY_FILE, debug=True)
+        new_files = process_feed(RSS_FEED_URL, PODCAST_AUDIO_FOLDER, PODCAST_HISTORY_FILE, debug=True)
         print("RSS feed processing completed.")
-        
+
         if ENABLE_GITHUB_COMMIT:
             upload_successful = commit_database_and_files(REPO_ROOT, CHROMADB_DB_PATH, PODCAST_HISTORY_FILE, new_files)
             if upload_successful:

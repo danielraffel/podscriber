@@ -1,8 +1,8 @@
 __pycache__
 get_config.py
 cleanup.sh
-config.py
 uv.lock
 pyproject.toml
 podscriber.py
 podscriber.code-workspace
+config.py
