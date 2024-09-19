@@ -11,7 +11,7 @@ import chromadb
 
 # Import configuration
 from config import (
-    RSS_FEED_URL, PODCAST_AUDIO_FOLDER, PODCAST_HISTORY_FILE, WHISPER_MODEL_PATH,
+    RSS_FEED_URL, PODCAST_AUDIO_FOLDER, WHISPER_MODEL_PATH,
     WHISPER_EXECUTABLE, TRANSCRIBED_FOLDER, AUTO_OVERWRITE, GITHUB_REPO_CHECK,
     GITHUB_REPO_NAME, ENABLE_GITHUB_COMMIT, UPDATE_HTML_LINKS,
     GITHUB_USERNAME, GITHUB_TOKEN, GITHUB_REPO_PRIVATE, DEBUG_MODE_LIMIT, 
@@ -31,7 +31,6 @@ os.environ["TOKENIZERS_PARALLELISM"] = TOKENIZERS_PARALLELISM
 # Configuration and Constants
 REPO_ROOT = os.path.expanduser(REPO_ROOT)
 PODCAST_AUDIO_FOLDER = os.path.expanduser(PODCAST_AUDIO_FOLDER)
-PODCAST_HISTORY_FILE = os.path.expanduser(PODCAST_HISTORY_FILE)
 TRANSCRIBED_FOLDER = os.path.join(REPO_ROOT, "transcribed")
 CHROMADB_DB_PATH = os.path.expanduser(CHROMADB_DB_PATH)
 
@@ -733,14 +732,14 @@ if __name__ == "__main__":
     pull_and_sync_chromadb_if_necessary(GITHUB_REPO_NAME, CHROMADB_DB_PATH, hash_file, os.path.relpath(CHROMADB_DB_PATH, REPO_ROOT))
 
     try:
-        new_files = process_feed(RSS_FEED_URL, PODCAST_AUDIO_FOLDER, PODCAST_HISTORY_FILE, debug=True)
+        new_files = process_feed(RSS_FEED_URL, PODCAST_AUDIO_FOLDER, debug=True)
         print("RSS feed processing completed.")
 
         # Regenerate the chroma hashes after updating the database
         generate_chroma_hashes(CHROMADB_DB_PATH, REPO_ROOT, hash_file)
 
         if ENABLE_GITHUB_COMMIT:
-            upload_successful = commit_database_and_files(REPO_ROOT, CHROMADB_DB_PATH, PODCAST_HISTORY_FILE, new_files)
+            upload_successful = commit_database_and_files(REPO_ROOT, CHROMADB_DB_PATH, new_files)
             if upload_successful:
                 print("Files successfully uploaded to GitHub.")
             else:
