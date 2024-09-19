@@ -54,9 +54,9 @@ def get_podcast_entries():
         # Loop through each document and metadata
         for document, guid, metadata in zip(documents, ids, metadatas):
             # Extract metadata fields, with defaults for missing data
-            podcast_name = metadata.get("podcast_name", "Unknown Podcast")
-            episode_title = metadata.get("episode_title", "Unknown Episode")
-            listen_date = metadata.get("listenDate", "Unknown Date")
+            podcast_name = metadata.get("podcast_name", "Unknown Podcast") # Name of the podcast
+            episode_title = metadata.get("episode_title", "Unknown Episode") # Title of the episode
+            listen_date = metadata.get("listenDate", "Unknown Date") # Date the podcast was listened to
             transcript_url = metadata.get("transcript_url", "#")  # URL for the transcript
             mp3_url = metadata.get("mp3_url", "#")  # URL for the mp3 file
             link = metadata.get("link", "#")  # Podcast website link
@@ -74,7 +74,6 @@ def get_podcast_entries():
 
     # Return the list of entries
     return entries
-
 
 # Check if git is installed and error out if not
 def check_git_installed():
@@ -465,41 +464,6 @@ def add_podcast_to_db_chroma(metadata, mp3_url, transcript_name, transcript_text
     )
     print("Data committed to ChromaDB.")
 
-# Generate the HTML file from the ChromaDB collection
-def generate_html_from_chroma_db(history_file):
-    global podcast_collection
-    """Generate HTML file from ChromaDB collection."""
-    print(f"Generating HTML from ChromaDB")
-    
-    # Start the HTML log (this will overwrite any existing content)
-    start_html_log(history_file)
-    
-    # Retrieve all documents in the collection
-    results = podcast_collection.get()
-
-    if 'documents' in results and len(results['documents']) > 0:
-        documents = results['documents']
-        ids = results['ids']
-        metadatas = results.get('metadatas', [])
-    else:
-        print("No documents found in ChromaDB.")
-        return
-
-    print(f"Found {len(documents)} podcast entries in ChromaDB.")
-    
-    for document, guid, metadata in zip(documents, ids, metadatas):
-        # Extract metadata from the document
-        podcast_name = metadata.get("podcast_name", "Unknown Podcast")
-        episode_title = metadata.get("episode_title", "Unknown Episode")
-        listen_date = metadata.get("listenDate", "Unknown Date")
-        
-        print(f"Adding podcast entry to HTML: Podcast={podcast_name}, Episode={episode_title}, GUID={guid}")
-        save_downloaded_url(history_file, metadata, transcript_name=f"{normalize_folder_name(episode_title)}.txt")
-    
-    # End the HTML log properly
-    end_html_log(history_file)
-    print(f"HTML generation complete: {history_file}")
-
 # Generate SHA-256 hashes for all files in the ChromaDB directory and save them
 def generate_chroma_hashes(db_path, repo_root, hash_file):
     """Generate SHA-256 hashes for all files in the ChromaDB directory and save them."""
@@ -586,8 +550,6 @@ def process_feed(feed_url, download_folder, history_file, debug=True):
     
     if USE_EXISTING_DATA and os.path.exists(CHROMADB_DB_PATH) and os.path.exists(TRANSCRIBED_FOLDER):
         print("Using existing ChromaDB and transcript data.")
-        # Skip fetching RSS feed and directly generate HTML
-        generate_html_from_chroma_db(history_file)
         return []  # No new files to delete
 
     if debug:
@@ -676,13 +638,6 @@ def process_feed(feed_url, download_folder, history_file, debug=True):
         else:
             if debug:
                 print(f"No enclosure found for {full_title}")
-
-    # Ensure HTML is generated
-    if new_files or debug:
-        print("Generating HTML file...")
-        generate_html_from_chroma_db(history_file)
-    else:
-        print("No new podcasts found, skipping HTML generation.")
 
     return new_files  # Now returns tuples of (mp3_file_path, wav_file_path)
 
@@ -810,128 +765,6 @@ def organize_podcast_files(podcast_name, episode_title, transcript_file):
     shutil.move(transcript_file, new_transcript_path)
 
     return new_transcript_path
-
-# Initialize the PodcastHistory file with a header, if it does not exist
-def start_html_log(history_file):
-    """Initialize the PodcastHistory file with a header, if it does not exist."""
-    header = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Podcast &#x1F442; Archive</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        /* Optional: Custom styles can go here */
-    </style>
-</head>
-<body class="bg-gray-100">
-    <div class="container mx-auto p-4">
-        <h2 class="text-3xl font-bold mb-4">Podcast &#x1F442; Archive</h2>
-        <table id="podcastTable" class="min-w-full bg-white shadow-md rounded-lg overflow-hidden">
-            <thead>
-                <tr class="bg-blue-500 text-white uppercase text-sm leading-normal">
-                    <th class="py-3 px-6 text-left">Podcast</th>
-                    <th class="py-3 px-6 text-left">Episode</th>
-                    <th class="py-3 px-6 text-left">Listen Date</th>
-                    <th class="py-3 px-6 text-left">Transcript</th>
-                    <th class="py-3 px-6 text-left">Stream</th>
-                </tr>
-            </thead>
-            <tbody class="text-gray-600 text-sm font-light">
-                """
-    with open(history_file, "w") as f:
-        f.write(header)
-
-# Add a footer to the PodcastHistory file
-def end_html_log(history_file):
-    """Finalize the PodcastHistory file with a footer."""
-    footer = """
-            </tbody>
-        </table>
-    </div>
-    <script>
-        function sortTable(n) {
-          var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-          table = document.getElementById("podcastTable");
-          switching = true;
-          dir = "asc"; 
-          while (switching) {
-            switching = false;
-            rows = table.rows;
-            for (i = 1; i < (rows.length - 1); i++) {
-              shouldSwitch = false;
-              x = rows[i].getElementsByTagName("TD")[n];
-              y = rows[i + 1].getElementsByTagName("TD")[n];
-              if (dir == "asc") {
-                if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
-                  shouldSwitch = true;
-                  break;
-                }
-              } else if (dir == "desc") {
-                if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
-                  shouldSwitch = true;
-                  break;
-                }
-              }
-            }
-            if (shouldSwitch) {
-              rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
-              switching = true;
-              switchcount ++;      
-            } else {
-              if (switchcount == 0 && dir == "asc") {
-                dir = "desc";
-                switching = true;
-              }
-            }
-          }
-        }
-    </script>
-</body>
-</html>
-    """
-    with open(history_file, "a") as f:
-        f.write(footer)
-
-# Save the downloaded URL and metadata to the PodcastHistory file
-def save_downloaded_url(history_file, metadata, transcript_name):
-    """Save the downloaded URL and metadata to the PodcastHistory file."""
-    print(f"Saving to HTML: {metadata['episode_title']}")
-
-    # Construct the transcript URL on GitHub
-    transcript_github_url = f"https://raw.githubusercontent.com/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/main/transcribed/{normalize_folder_name(metadata['podcast_name'])}/{transcript_name}"
-    
-    # Handle case where link might be None or empty
-    pod_site_link = f"<a href=\"{html.escape(metadata.get('link', ''))}\" target=\"_blank\">Pod Site</a>" if metadata.get('link') else "N/A"
-    
-    entry = f"""
-<tr class="hover:bg-gray-100">
-    <td class="py-4 px-6 border-b text-lg"><a href="{html.escape(metadata['link'])}" target="_blank" class="text-blue-600 hover:underline">{html.escape(metadata['podcast_name'])}</a></td>
-    <td class="py-4 px-6 border-b text-lg"><a href="{html.escape(metadata['guid'])}" target="_blank" class="text-blue-600 hover:underline">{html.escape(metadata['episode_title'])}</a></td>
-    <td class="py-4 px-6 border-b text-lg">{html.escape(format_date_short(metadata['listenDate']))}</td>
-    <td class="py-4 px-6 border-b text-lg"><a href="{transcript_github_url}" target="_blank" class="text-blue-500 text-lg">&#x1F4C4;</a></td>
-    <td class="py-4 px-6 border-b text-lg"><audio src="{metadata['mp3_url']}" controls class="w-8 h-8"></audio></td>
-</tr>
-    """
-    with open(history_file, "a") as f:
-        f.write(entry)
-
-# Update the HTML file links to point to the appropriate locations, if necessary
-def update_html_links(history_file):
-    """Update HTML file links to point to the appropriate locations, if necessary."""
-    with open(history_file, 'r+') as f:
-        content = f.read()
-        # Update .txt links to point to the appropriate location
-        content = re.sub(
-            r'file://[^"]+\.txt',
-            lambda match: match.group(0).replace('file://', f"https://raw.githubusercontent.com/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/main/transcribed/"),
-            content
-        )
-        f.seek(0)
-        f.write(content)
-        f.truncate()
 
 # Check if Whisper is installed by verifying the existence of key files
 def check_whisper_installed():
