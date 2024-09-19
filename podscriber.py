@@ -53,25 +53,24 @@ def get_podcast_entries():
         # Loop through each document and metadata
         for document, guid, metadata in zip(documents, ids, metadatas):
             # Extract metadata fields, with defaults for missing data
-            podcast_name = metadata.get("podcast_name", "Unknown Podcast") # Name of the podcast
-            episode_title = metadata.get("episode_title", "Unknown Episode") # Title of the episode
-            listen_date = metadata.get("listenDate", "Unknown Date") # Date the podcast was listened to
-            transcript_url = metadata.get("transcript_url", "#")  # URL for the transcript
-            mp3_url = metadata.get("mp3_url", "#")  # URL for the mp3 file
-            link = metadata.get("link", "#")  # Podcast website link
+            podcast_name = metadata.get("podcast_name", "Unknown Podcast")
+            episode_title = metadata.get("episode_title", "Unknown Episode")
+            listen_date = metadata.get("listenDate", "Unknown Date")
+            transcript_url = metadata.get("transcript_url", "#")
+            mp3_url = metadata.get("mp3_url", "#")  
+            link = metadata.get("link", "#")  
 
-            # Append a dictionary for each entry
+            # Append each entry as a dictionary
             entries.append({
                 "podcast_name": podcast_name,
                 "episode_title": episode_title,
                 "listen_date": listen_date,
-                "transcript_url": transcript_url,
+                "transcript_url": transcript_url,  
                 "mp3_url": mp3_url,
                 "link": link,
                 "guid": guid
             })
 
-    # Return the list of entries
     return entries
 
 # Check if git is installed and error out if not
@@ -378,15 +377,22 @@ def commit_database_and_files(repo_root, db_path, new_files):
 # Add the podcast metadata and transcript to the ChromaDB collection
 def add_podcast_to_db_chroma(metadata, mp3_url, transcript_name, transcript_text):
     global podcast_collection
-    metadata['mp3_url'] = mp3_url  # Store the mp3_url in the metadata
+    # Construct the GitHub transcript URL
+    transcript_github_url = f"https://raw.githubusercontent.com/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/main/transcribed/{normalize_folder_name(metadata['podcast_name'])}/{transcript_name}"
+    
+    # Update the metadata with the mp3_url and transcript_url
+    metadata['mp3_url'] = mp3_url  # Store the mp3 URL in the metadata
+    metadata['transcript_url'] = transcript_github_url  # Store the transcript GitHub URL in the metadata
+    
+    # Add the document to ChromaDB with the transcript and metadata
     document = f"{metadata['podcast_name']} - {metadata['episode_title']}\nTranscript: {transcript_text}"
     
     podcast_collection.upsert(
-        documents=[document],  # Add the text of the transcript with additional metadata as a document
+        documents=[document],  # Add the transcript text
         ids=[metadata['guid']],  # Use the GUID as the document ID
-        metadatas=[metadata]  # Store the entire metadata dictionary
+        metadatas=[metadata]  # Store the metadata, including transcript URL
     )
-    print("Data committed to ChromaDB.")
+    print(f"Data committed to ChromaDB with transcript URL: {transcript_github_url}")
 
 # Generate SHA-256 hashes for all files in the ChromaDB directory and save them
 def generate_chroma_hashes(db_path, repo_root, hash_file):
@@ -546,7 +552,7 @@ def process_feed(feed_url, download_folder, debug=True):
                     if debug:
                         print(f"Organized file: Transcript={new_transcript_path}")
 
-                    # Save podcast metadata into the ChromaDB, including transcript text
+                    # Save podcast metadata into the ChromaDB, including transcript text and transcript URL
                     add_podcast_to_db_chroma(metadata, mp3_url, os.path.basename(new_transcript_path), transcript_text)
 
                     # Add both the MP3 and WAV file paths to new_files for deletion later
