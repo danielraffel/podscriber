@@ -319,26 +319,20 @@ def has_initial_commit(repo_root):
     return result.returncode == 0
 
 # Commit changes to the database directory, HTML file, and new transcribed files
-def commit_database_and_files(repo_root, db_path, history_file, new_files):
-    """Commit changes to the database directory, HTML file, and new transcribed files."""
-    if not os.path.exists(history_file):
-        print(f"Error: {history_file} does not exist.")
-        return False
+def commit_database_and_files(repo_root, db_path, new_files):
+    """Commit changes to the database directory and new transcribed files."""
 
     if db_path and not os.path.exists(db_path):
         print(f"Error: Database path {db_path} does not exist.")
         return False
 
     try:
-        # Check if there is an initial commit
         has_commit = has_initial_commit(repo_root)
 
         if not has_commit:
             print("No initial commit found. Creating initial commit.")
             create_initial_commit(repo_root)
-            # After creating the initial commit, proceed with adding and pushing new files
 
-        # Check for uncommitted changes before stashing
         status = subprocess.run(
             ["git", "status", "--porcelain"],
             cwd=repo_root,
@@ -346,19 +340,16 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
             text=True
         ).stdout
         if status.strip():
-            # Uncommitted changes exist, stash them
             if not run_git_command(["git", "stash"], cwd=repo_root):
                 print("Failed to stash changes.")
                 return False
         else:
             print("No changes to stash.")
 
-        # Pull latest changes
         if not run_git_command(["git", "pull", "--rebase", "origin", "main"], cwd=repo_root):
             print("Failed to pull latest changes.")
             return False
 
-        # Try to pop the stash, but continue even if there's nothing to pop
         result = subprocess.run(
             ["git", "stash", "pop"],
             cwd=repo_root,
@@ -372,10 +363,6 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
                 print(f"Error during git stash pop: {result.stderr}")
                 return False
 
-        # Proceed to add and commit files as before
-        # [Rest of the code remains the same]
-
-        # Stage the entire ChromaDB database directory
         if db_path:
             print(f"Adding to Git: {os.path.relpath(db_path, repo_root)}")
             if not run_git_command(
@@ -385,16 +372,6 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
                 print("Failed to add database directory to Git.")
                 return False
 
-        # Stage the HTML file
-        print(f"Adding to Git: {os.path.relpath(history_file, repo_root)}")
-        if not run_git_command(
-            ["git", "add", os.path.relpath(history_file, repo_root)],
-            cwd=repo_root
-        ):
-            print("Failed to add history file to Git.")
-            return False
-
-        # Stage the transcribed folder if it exists
         if os.path.exists(TRANSCRIBED_FOLDER):
             print(f"Adding to Git: {os.path.relpath(TRANSCRIBED_FOLDER, repo_root)}")
             if not run_git_command(
@@ -404,7 +381,6 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
                 print("Failed to add transcribed folder to Git.")
                 return False
 
-        # Stage the updated chroma_hashes.txt file
         hash_file = os.path.join(repo_root, 'chroma_hashes.txt')
         if os.path.exists(hash_file):
             print(f"Adding to Git: {os.path.relpath(hash_file, repo_root)}")
@@ -415,16 +391,6 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
                 print("Failed to add chroma_hashes.txt to Git.")
                 return False
 
-        # Debugging: Print git status
-        status_result = subprocess.run(
-            ["git", "status"],
-            cwd=repo_root,
-            capture_output=True,
-            text=True
-        )
-        print(f"Git status output:\n{status_result.stdout}")
-
-        # Check if there are any changes to commit
         status = subprocess.run(
             ["git", "status", "--porcelain"],
             cwd=repo_root,
@@ -433,7 +399,7 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
         ).stdout
         if status.strip():
             if not run_git_command(
-                ["git", "commit", "-m", "Update database, HTML, and podcast files"],
+                ["git", "commit", "-m", "Update database and podcast files"],
                 cwd=repo_root
             ):
                 print("Failed to commit changes.")
@@ -441,10 +407,10 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
             if not run_git_command(["git", "push", "origin", "main"], cwd=repo_root):
                 print("Failed to push changes to remote.")
                 return False
-            print("Database, HTML, and podcast files committed and pushed.")
+            print("Database and podcast files committed and pushed.")
             return True
         else:
-            print("No changes to commit for the database, HTML, or podcast files.")
+            print("No changes to commit.")
             return False
 
     except Exception as e:
@@ -544,7 +510,7 @@ def pull_and_sync_chromadb_if_necessary(repo_name, db_path, hash_file, remote_db
     os.remove(remote_hash_file)  # Clean up the temporary remote hash file
 
 # Process the RSS feed, download new MP3 files, transcribe them, and store data in ChromaDB
-def process_feed(feed_url, download_folder, history_file, debug=True):
+def process_feed(feed_url, download_folder, debug=True):
     global podcast_collection
     """Process the RSS feed, download new MP3 files, transcribe them, and store data in ChromaDB."""
     
