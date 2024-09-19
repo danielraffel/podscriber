@@ -214,16 +214,11 @@ def check_github_pages_enabled():
     response = requests.get(url, headers=headers)
     return response.status_code == 200
 
-# Enable GitHub Pages for the repository and update the README.md with the PODCAST_HISTORY_FILE link
+# Enable GitHub Pages for the repository
 def enable_github_pages():
     """Enable GitHub Pages for the repository."""
-    # Construct the URL to the podcast archive
-    history_filename = os.path.basename(PODCAST_HISTORY_FILE)
-    archive_url = f"https://{GITHUB_USERNAME}.github.io/{GITHUB_REPO_NAME}/{history_filename}"
-
     if check_github_pages_enabled():
         print(f"GitHub Pages is already enabled for {GITHUB_REPO_NAME}.")
-        print(f"Visit your site at: {archive_url}")
         return
 
     headers = {
@@ -242,44 +237,8 @@ def enable_github_pages():
     response = requests.post(url, headers=headers, json=data)
     if response.status_code in [201, 204]:
         print(f"GitHub Pages enabled for repository {GITHUB_REPO_NAME}.")
-        print(f"Visit your site at: {archive_url}")
-        
-        # Update the README.md with the archive link
-        update_readme_with_archive_link(REPO_ROOT, archive_url)
     else:
         print(f"Failed to enable GitHub Pages: {response.status_code} - {response.text}")
-
-# Update the README.md by replacing the existing description with the archive link
-def update_readme_with_archive_link(repo_root, archive_url):
-    """Update the README.md by replacing the existing description with the archive link."""
-    readme_path = os.path.join(repo_root, "README.md")
-    if os.path.exists(readme_path):
-        with open(readme_path, "r+") as f:
-            content = f.read()
-            updated_content = re.sub(
-                r'This repository contains podcast archives\.',
-                f'You can access the podcast archive [here]({archive_url}).',
-                content
-            )
-            f.seek(0)
-            f.write(updated_content)
-            f.truncate()
-        print(f"Updated README.md with archive link: {archive_url}")
-    else:
-        with open(readme_path, "w") as f:
-            f.write(f"# {GITHUB_REPO_NAME}\n\nYou can access the podcast archive [here]({archive_url}).\n")
-        print(f"Created README.md and added archive link: {archive_url}")
-
-    # Commit and push the updated README.md
-    if not run_git_command(["git", "add", "README.md"], cwd=repo_root):
-        print("Failed to add README.md to Git.")
-        return
-    if not run_git_command(["git", "commit", "-m", "Update README.md with podcast archive link"], cwd=repo_root):
-        print("Failed to commit README.md.")
-        return
-    if not run_git_command(["git", "push", "origin", "main"], cwd=repo_root):
-        print("Failed to push changes to remote.")
-        return
 
 # Calculate the SHA-256 hash of the local chroma_db directory so we can compare it to the remote repo
 def file_hash(filepath):
