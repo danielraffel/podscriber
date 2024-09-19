@@ -20,6 +20,11 @@ from config import (
     USE_EXISTING_DATA
 )
 
+# Initialize ChromaDB globally so we can use it in FastAPI
+client = chromadb.PersistentClient(path=os.path.expanduser(CHROMADB_DB_PATH))
+podcast_collection = client.get_or_create_collection(name="podcasts")
+client.heartbeat()
+
 # Set Hugging Face Tokenizers environment variable
 os.environ["TOKENIZERS_PARALLELISM"] = TOKENIZERS_PARALLELISM
 
@@ -29,6 +34,47 @@ PODCAST_AUDIO_FOLDER = os.path.expanduser(PODCAST_AUDIO_FOLDER)
 PODCAST_HISTORY_FILE = os.path.expanduser(PODCAST_HISTORY_FILE)
 TRANSCRIBED_FOLDER = os.path.join(REPO_ROOT, "transcribed")
 CHROMADB_DB_PATH = os.path.expanduser(CHROMADB_DB_PATH)
+
+# Get podcast entries from ChromaDB
+def get_podcast_entries():
+    global podcast_collection
+
+    # Query all documents from the ChromaDB collection
+    results = podcast_collection.get()
+
+    # Initialize an empty list to store the entries
+    entries = []
+
+    # Check if results contain documents
+    if 'documents' in results and len(results['documents']) > 0:
+        documents = results['documents']
+        ids = results['ids']
+        metadatas = results.get('metadatas', [])
+        
+        # Loop through each document and metadata
+        for document, guid, metadata in zip(documents, ids, metadatas):
+            # Extract metadata fields, with defaults for missing data
+            podcast_name = metadata.get("podcast_name", "Unknown Podcast")
+            episode_title = metadata.get("episode_title", "Unknown Episode")
+            listen_date = metadata.get("listenDate", "Unknown Date")
+            transcript_url = metadata.get("transcript_url", "#")  # URL for the transcript
+            mp3_url = metadata.get("mp3_url", "#")  # URL for the mp3 file
+            link = metadata.get("link", "#")  # Podcast website link
+
+            # Append a dictionary for each entry
+            entries.append({
+                "podcast_name": podcast_name,
+                "episode_title": episode_title,
+                "listen_date": listen_date,
+                "transcript_url": transcript_url,
+                "mp3_url": mp3_url,
+                "link": link,
+                "guid": guid
+            })
+
+    # Return the list of entries
+    return entries
+
 
 # Check if git is installed and error out if not
 def check_git_installed():
@@ -922,12 +968,6 @@ if __name__ == "__main__":
     # Initialize the local Git repository
     initialize_local_git_repo(REPO_ROOT)
     
-    # Initialize ChromaDB after Git repository is synchronized
-    global client, podcast_collection
-    client = chromadb.PersistentClient(path=CHROMADB_DB_PATH)
-    podcast_collection = client.get_or_create_collection(name="podcasts")
-    client.heartbeat()
-
     # Generate and compare hashes before syncing
     hash_file = os.path.join(REPO_ROOT, 'chroma_hashes.txt')
     generate_chroma_hashes(CHROMADB_DB_PATH, REPO_ROOT, hash_file)
