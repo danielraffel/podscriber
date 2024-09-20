@@ -10,6 +10,10 @@ TRANSCRIBED_FOLDER = "~/podscriber/transcribed"  # Path where transcribed text f
 # ChromaDB Integration Settings
 CHROMADB_DB_PATH = "~/podscriber/chroma_db" # Path to the ChromaDB database file
 
+# FastAPI and Jinja2 File Paths
+APP_ENTRY = "$Home/podscriber/main.py" # Path to the entry point for the FastAPI application
+JINJA_TEMPLATES = "$Home/podscriber/templates" # Path to the Jinja2 templates for rendering the FastAPI application
+
 # Configuration for Whisper transcription
 WHISPER_SETUP = "~/WhisperSetup" # Path to the WhisperSetup folder
 WHISPER_ROOT = "~/whisper.cpp" # Path to the Whisper root folder
