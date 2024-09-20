@@ -8,6 +8,7 @@ import subprocess
 import shutil
 import hashlib
 import chromadb
+import inspect
 
 # Import configuration
 from config import (
@@ -17,8 +18,34 @@ from config import (
     GITHUB_USERNAME, GITHUB_TOKEN, GITHUB_REPO_PRIVATE, DEBUG_MODE_LIMIT, 
     REPO_ROOT, ENABLE_GITHUB_PAGES,
     WHISPER_SETUP, WHISPER_ROOT,CHROMADB_DB_PATH, TOKENIZERS_PARALLELISM,
-    USE_EXISTING_DATA
+    USE_EXISTING_DATA, APP_ENTRY, JINJA_TEMPLATES
 )
+
+# Ensure APP_ENTRY and JINJA_TEMPLATES files are copied into the Git repository
+def ensure_files_copied():
+    """Ensure the APP_ENTRY and JINJA_TEMPLATES files are copied into the Git repository."""
+    app_entry_copy = os.path.join(REPO_ROOT, "main.py")
+    jinja_templates_copy = os.path.join(REPO_ROOT, "templates")
+
+    # Copy APP_ENTRY file to the repository
+    if not os.path.exists(app_entry_copy) or os.path.getmtime(app_entry_copy) < os.path.getmtime(APP_ENTRY):
+        shutil.copy(APP_ENTRY, app_entry_copy)
+        print(f"Copied {APP_ENTRY} to {app_entry_copy}")
+        run_git_command(["git", "add", app_entry_copy], REPO_ROOT)  # Add to git
+        run_git_command(["git", "commit", "-m", "Update main.py"], REPO_ROOT)  # Commit changes
+
+    else:
+        print(f"{app_entry_copy} already exists and is up-to-date.")
+
+    # Copy JINJA_TEMPLATES directory to the repository
+    if not os.path.exists(jinja_templates_copy):
+        shutil.copytree(JINJA_TEMPLATES, jinja_templates_copy)
+        print(f"Copied {JINJA_TEMPLATES} to {jinja_templates_copy}")
+        run_git_command(["git", "add", jinja_templates_copy], REPO_ROOT)  # Add to git
+        run_git_command(["git", "commit", "-m", "Update templates"], REPO_ROOT)  # Commit changes
+
+    else:
+        print(f"{jinja_templates_copy} already exists.")
 
 # Initialize ChromaDB globally so we can use it in FastAPI
 client = chromadb.PersistentClient(path=os.path.expanduser(CHROMADB_DB_PATH))
@@ -276,40 +303,40 @@ def has_initial_commit(repo_root):
     return result.returncode == 0
 
 # Commit changes to the database directory, HTML file, and new transcribed files
-def commit_database_and_files(repo_root, db_path, new_files):
-    """Commit changes to the database directory and new transcribed files."""
+def commit_database_and_files(db_path, new_files):
+    """Commit changes to the database directory, new transcribed files, symlinked APP_ENTRY, and JINJA_TEMPLATES folder."""
 
     if db_path and not os.path.exists(db_path):
         print(f"Error: Database path {db_path} does not exist.")
         return False
 
     try:
-        has_commit = has_initial_commit(repo_root)
+        has_commit = has_initial_commit(REPO_ROOT)
 
         if not has_commit:
             print("No initial commit found. Creating initial commit.")
-            create_initial_commit(repo_root)
+            create_initial_commit(REPO_ROOT)
 
         status = subprocess.run(
             ["git", "status", "--porcelain"],
-            cwd=repo_root,
+            cwd=REPO_ROOT,
             capture_output=True,
             text=True
         ).stdout
         if status.strip():
-            if not run_git_command(["git", "stash"], cwd=repo_root):
+            if not run_git_command(["git", "stash"], cwd=REPO_ROOT):
                 print("Failed to stash changes.")
                 return False
         else:
             print("No changes to stash.")
 
-        if not run_git_command(["git", "pull", "--rebase", "origin", "main"], cwd=repo_root):
+        if not run_git_command(["git", "pull", "--rebase", "origin", "main"], cwd=REPO_ROOT):
             print("Failed to pull latest changes.")
             return False
 
         result = subprocess.run(
             ["git", "stash", "pop"],
-            cwd=repo_root,
+            cwd=REPO_ROOT,
             capture_output=True,
             text=True
         )
@@ -319,52 +346,55 @@ def commit_database_and_files(repo_root, db_path, new_files):
             else:
                 print(f"Error during git stash pop: {result.stderr}")
                 return False
+            
+        
 
+        # Add the ChromaDB database directory
         if db_path:
-            print(f"Adding to Git: {os.path.relpath(db_path, repo_root)}")
+            print(f"Adding to Git: {os.path.relpath(db_path, REPO_ROOT)}")
             if not run_git_command(
-                ["git", "add", os.path.relpath(db_path, repo_root)],
-                cwd=repo_root
+                ["git", "add", os.path.relpath(db_path, REPO_ROOT)],
+                cwd=REPO_ROOT
             ):
                 print("Failed to add database directory to Git.")
                 return False
 
         if os.path.exists(TRANSCRIBED_FOLDER):
-            print(f"Adding to Git: {os.path.relpath(TRANSCRIBED_FOLDER, repo_root)}")
+            print(f"Adding to Git: {os.path.relpath(TRANSCRIBED_FOLDER, REPO_ROOT)}")
             if not run_git_command(
-                ["git", "add", os.path.relpath(TRANSCRIBED_FOLDER, repo_root)],
-                cwd=repo_root
+                ["git", "add", os.path.relpath(TRANSCRIBED_FOLDER, REPO_ROOT)],
+                cwd=REPO_ROOT
             ):
                 print("Failed to add transcribed folder to Git.")
                 return False
 
-        hash_file = os.path.join(repo_root, 'chroma_hashes.txt')
+        hash_file = os.path.join(REPO_ROOT, 'chroma_hashes.txt')
         if os.path.exists(hash_file):
-            print(f"Adding to Git: {os.path.relpath(hash_file, repo_root)}")
+            print(f"Adding to Git: {os.path.relpath(hash_file, REPO_ROOT)}")
             if not run_git_command(
-                ["git", "add", os.path.relpath(hash_file, repo_root)],
-                cwd=repo_root
+                ["git", "add", os.path.relpath(hash_file, REPO_ROOT)],
+                cwd=REPO_ROOT
             ):
                 print("Failed to add chroma_hashes.txt to Git.")
                 return False
 
         status = subprocess.run(
             ["git", "status", "--porcelain"],
-            cwd=repo_root,
+            cwd=REPO_ROOT,
             capture_output=True,
             text=True
         ).stdout
         if status.strip():
             if not run_git_command(
-                ["git", "commit", "-m", "Update database and podcast files"],
-                cwd=repo_root
+                ["git", "commit", "-m", "Update database, APP_ENTRY symlink, JINJA_TEMPLATES symlink, and podcast files"],
+                cwd=REPO_ROOT
             ):
                 print("Failed to commit changes.")
                 return False
-            if not run_git_command(["git", "push", "origin", "main"], cwd=repo_root):
+            if not run_git_command(["git", "push", "origin", "main"], cwd=REPO_ROOT):
                 print("Failed to push changes to remote.")
                 return False
-            print("Database and podcast files committed and pushed.")
+            print("Database, APP_ENTRY symlink, JINJA_TEMPLATES symlink, and podcast files committed and pushed.")
             return True
         else:
             print("No changes to commit.")
@@ -730,6 +760,9 @@ if __name__ == "__main__":
 
     # Initialize the local Git repository
     initialize_local_git_repo(REPO_ROOT)
+
+    # Ensure APP_ENTRY and JINJA_TEMPLATES are copied to the Git repository
+    ensure_files_copied()
     
     # Generate and compare hashes before syncing
     hash_file = os.path.join(REPO_ROOT, 'chroma_hashes.txt')
@@ -745,7 +778,12 @@ if __name__ == "__main__":
         generate_chroma_hashes(CHROMADB_DB_PATH, REPO_ROOT, hash_file)
 
         if ENABLE_GITHUB_COMMIT:
-            upload_successful = commit_database_and_files(REPO_ROOT, CHROMADB_DB_PATH, new_files)
+
+            # Print the function signature to verify the arguments
+            print(f"Function signature of commit_database_and_files: {inspect.signature(commit_database_and_files)}")
+            print(f"Arguments being passed: CHROMADB_DB_PATH={CHROMADB_DB_PATH}, new_files={new_files}")
+
+            upload_successful = commit_database_and_files(CHROMADB_DB_PATH, new_files)
             if upload_successful:
                 print("Files successfully uploaded to GitHub.")
             else:
