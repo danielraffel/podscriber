@@ -21,11 +21,17 @@ from config import (
     USE_EXISTING_DATA, APP_ENTRY, JINJA_TEMPLATES
 )
 
-# Ensure APP_ENTRY and JINJA_TEMPLATES files are copied into the Git repository
+# Ensure the APP_ENTRY, JINJA_TEMPLATES, pyproject.toml, and config.py (from repo_root_config.py) are copied into the Git repository.
 def ensure_files_copied():
-    """Ensure the APP_ENTRY and JINJA_TEMPLATES files are copied into the Git repository."""
+    """Ensure the APP_ENTRY, JINJA_TEMPLATES, pyproject.toml, and config.py (from repo_root_config.py) are copied into the Git repository."""
     app_entry_copy = os.path.join(REPO_ROOT, "main.py")
     jinja_templates_copy = os.path.join(REPO_ROOT, "templates")
+    config_copy = os.path.join(REPO_ROOT, "config.py")
+    pyproject_copy = os.path.join(REPO_ROOT, "pyproject.toml")
+    
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    config_source = os.path.join(script_dir, "repo_root_config.py")
+    pyproject_source = os.path.join(script_dir, "pyproject.toml")
 
     # Copy APP_ENTRY file to the repository
     if not os.path.exists(app_entry_copy) or os.path.getmtime(app_entry_copy) < os.path.getmtime(APP_ENTRY):
@@ -33,7 +39,6 @@ def ensure_files_copied():
         print(f"Copied {APP_ENTRY} to {app_entry_copy}")
         run_git_command(["git", "add", app_entry_copy], REPO_ROOT)  # Add to git
         run_git_command(["git", "commit", "-m", "Update main.py"], REPO_ROOT)  # Commit changes
-
     else:
         print(f"{app_entry_copy} already exists and is up-to-date.")
 
@@ -43,22 +48,26 @@ def ensure_files_copied():
         print(f"Copied {JINJA_TEMPLATES} to {jinja_templates_copy}")
         run_git_command(["git", "add", jinja_templates_copy], REPO_ROOT)  # Add to git
         run_git_command(["git", "commit", "-m", "Update templates"], REPO_ROOT)  # Commit changes
-
     else:
         print(f"{jinja_templates_copy} already exists.")
 
-    # Create a new config.py file in REPO_ROOT with hardcoded paths so that FastAPI can access CHROMADB_DB_PATH
-config_file_path = os.path.join(REPO_ROOT, "config.py")
-with open(config_file_path, "w") as config_file:
-    config_file.write(f"""# ChromaDB Integration Settings
-CHROMADB_DB_PATH = "$HOME/podscriber/chroma_db"  # Path to the ChromaDB database file
-""")
-print(f"Created {config_file_path} with hardcoded paths.")
+    # Copy repo_root_config.py to the repository as config.py
+    if not os.path.exists(config_copy) or os.path.getmtime(config_copy) < os.path.getmtime(config_source):
+        shutil.copy(config_source, config_copy)
+        print(f"Copied {config_source} to {config_copy}")
+        run_git_command(["git", "add", config_copy], REPO_ROOT)  # Add to git
+        run_git_command(["git", "commit", "-m", "Update config.py"], REPO_ROOT)  # Commit changes
+    else:
+        print(f"{config_copy} already exists and is up-to-date.")
 
-# Add and commit config.py to the repository
-if not os.path.exists(config_file_path) or os.path.getmtime(config_file_path) < os.path.getmtime(REPO_ROOT):
-    run_git_command(["git", "add", config_file_path], REPO_ROOT)  # Add to git
-    run_git_command(["git", "commit", "-m", "Add or update config.py"], REPO_ROOT)  # Commit changes
+    # Copy pyproject.toml to the repository
+    if not os.path.exists(pyproject_copy) or os.path.getmtime(pyproject_copy) < os.path.getmtime(pyproject_source):
+        shutil.copy(pyproject_source, pyproject_copy)
+        print(f"Copied {pyproject_source} to {pyproject_copy}")
+        run_git_command(["git", "add", pyproject_copy], REPO_ROOT)  # Add to git
+        run_git_command(["git", "commit", "-m", "Update pyproject.toml"], REPO_ROOT)  # Commit changes
+    else:
+        print(f"{pyproject_copy} already exists and is up-to-date.")
 
 # Initialize ChromaDB globally so we can use it in FastAPI
 client = chromadb.PersistentClient(path=os.path.expanduser(CHROMADB_DB_PATH))
