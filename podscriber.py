@@ -47,6 +47,19 @@ def ensure_files_copied():
     else:
         print(f"{jinja_templates_copy} already exists.")
 
+    # Create a new config.py file in REPO_ROOT with hardcoded paths so that FastAPI can access CHROMADB_DB_PATH
+config_file_path = os.path.join(REPO_ROOT, "config.py")
+with open(config_file_path, "w") as config_file:
+    config_file.write(f"""# ChromaDB Integration Settings
+CHROMADB_DB_PATH = "$HOME/podscriber/chroma_db"  # Path to the ChromaDB database file
+""")
+print(f"Created {config_file_path} with hardcoded paths.")
+
+# Add and commit config.py to the repository
+if not os.path.exists(config_file_path) or os.path.getmtime(config_file_path) < os.path.getmtime(REPO_ROOT):
+    run_git_command(["git", "add", config_file_path], REPO_ROOT)  # Add to git
+    run_git_command(["git", "commit", "-m", "Add or update config.py"], REPO_ROOT)  # Commit changes
+
 # Initialize ChromaDB globally so we can use it in FastAPI
 client = chromadb.PersistentClient(path=os.path.expanduser(CHROMADB_DB_PATH))
 podcast_collection = client.get_or_create_collection(name="podcasts")
