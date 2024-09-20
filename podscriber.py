@@ -21,53 +21,99 @@ from config import (
     USE_EXISTING_DATA, APP_ENTRY, JINJA_TEMPLATES
 )
 
-# Ensure the APP_ENTRY, JINJA_TEMPLATES, pyproject.toml, and config.py (from repo_root_config.py) are copied into the Git repository.
+# Ensure the APP_ENTRY, JINJA_TEMPLATES, pyproject.toml, config.py, Dockerfile, and docker-compose.yaml are copied into the Git repository.
 def ensure_files_copied():
-    """Ensure the APP_ENTRY, JINJA_TEMPLATES, pyproject.toml, and config.py (from repo_root_config.py) are copied into the Git repository."""
+    """Ensure the APP_ENTRY, JINJA_TEMPLATES, pyproject.toml, config.py, Dockerfile, and docker-compose.yaml are copied into the Git repository."""
     app_entry_copy = os.path.join(REPO_ROOT, "main.py")
     jinja_templates_copy = os.path.join(REPO_ROOT, "templates")
     config_copy = os.path.join(REPO_ROOT, "config.py")
     pyproject_copy = os.path.join(REPO_ROOT, "pyproject.toml")
+    dockerfile_copy = os.path.join(REPO_ROOT, "Dockerfile")
+    docker_compose_copy = os.path.join(REPO_ROOT, "docker-compose.yaml")
     
     script_dir = os.path.dirname(os.path.abspath(__file__))
     config_source = os.path.join(script_dir, "repo_root_config.py")
     pyproject_source = os.path.join(script_dir, "pyproject.toml")
+    dockerfile_source = os.path.join(script_dir, "Dockerfile")
+    docker_compose_source = os.path.join(script_dir, "docker-compose.yaml")
 
-    # Copy APP_ENTRY file to the repository
-    if not os.path.exists(app_entry_copy) or os.path.getmtime(app_entry_copy) < os.path.getmtime(APP_ENTRY):
-        shutil.copy(APP_ENTRY, app_entry_copy)
-        print(f"Copied {APP_ENTRY} to {app_entry_copy}")
-        run_git_command(["git", "add", app_entry_copy], REPO_ROOT)  # Add to git
-        run_git_command(["git", "commit", "-m", "Update main.py"], REPO_ROOT)  # Commit changes
+    # Check and copy APP_ENTRY file
+    if os.path.exists(APP_ENTRY):
+        print(f"Found APP_ENTRY: {APP_ENTRY}")
+        if not os.path.exists(app_entry_copy) or os.path.getmtime(app_entry_copy) < os.path.getmtime(APP_ENTRY):
+            print(f"Copying {APP_ENTRY} to {app_entry_copy}")
+            shutil.copy(APP_ENTRY, app_entry_copy)
+            run_git_command(["git", "add", app_entry_copy], REPO_ROOT)
+            run_git_command(["git", "commit", "-m", "Update main.py"], REPO_ROOT)
+        else:
+            print(f"{app_entry_copy} already exists and is up-to-date.")
     else:
-        print(f"{app_entry_copy} already exists and is up-to-date.")
+        print(f"APP_ENTRY not found: {APP_ENTRY}")
 
-    # Copy JINJA_TEMPLATES directory to the repository
-    if not os.path.exists(jinja_templates_copy):
-        shutil.copytree(JINJA_TEMPLATES, jinja_templates_copy)
-        print(f"Copied {JINJA_TEMPLATES} to {jinja_templates_copy}")
-        run_git_command(["git", "add", jinja_templates_copy], REPO_ROOT)  # Add to git
-        run_git_command(["git", "commit", "-m", "Update templates"], REPO_ROOT)  # Commit changes
+    # Check and copy JINJA_TEMPLATES directory
+    if os.path.exists(JINJA_TEMPLATES):
+        print(f"Found JINJA_TEMPLATES: {JINJA_TEMPLATES}")
+        if not os.path.exists(jinja_templates_copy):
+            print(f"Copying {JINJA_TEMPLATES} to {jinja_templates_copy}")
+            shutil.copytree(JINJA_TEMPLATES, jinja_templates_copy)
+            run_git_command(["git", "add", jinja_templates_copy], REPO_ROOT)
+            run_git_command(["git", "commit", "-m", "Update templates"], REPO_ROOT)
+        else:
+            print(f"{jinja_templates_copy} already exists.")
     else:
-        print(f"{jinja_templates_copy} already exists.")
+        print(f"JINJA_TEMPLATES not found: {JINJA_TEMPLATES}")
 
-    # Copy repo_root_config.py to the repository as config.py
-    if not os.path.exists(config_copy) or os.path.getmtime(config_copy) < os.path.getmtime(config_source):
-        shutil.copy(config_source, config_copy)
-        print(f"Copied {config_source} to {config_copy}")
-        run_git_command(["git", "add", config_copy], REPO_ROOT)  # Add to git
-        run_git_command(["git", "commit", "-m", "Update config.py"], REPO_ROOT)  # Commit changes
+    # Check and copy config.py
+    if os.path.exists(config_source):
+        print(f"Found config source: {config_source}")
+        if not os.path.exists(config_copy) or os.path.getmtime(config_copy) < os.path.getmtime(config_source):
+            print(f"Copying {config_source} to {config_copy}")
+            shutil.copy(config_source, config_copy)
+            run_git_command(["git", "add", config_copy], REPO_ROOT)
+            run_git_command(["git", "commit", "-m", "Update config.py"], REPO_ROOT)
+        else:
+            print(f"{config_copy} already exists and is up-to-date.")
     else:
-        print(f"{config_copy} already exists and is up-to-date.")
+        print(f"Config source not found: {config_source}")
 
-    # Copy pyproject.toml to the repository
-    if not os.path.exists(pyproject_copy) or os.path.getmtime(pyproject_copy) < os.path.getmtime(pyproject_source):
-        shutil.copy(pyproject_source, pyproject_copy)
-        print(f"Copied {pyproject_source} to {pyproject_copy}")
-        run_git_command(["git", "add", pyproject_copy], REPO_ROOT)  # Add to git
-        run_git_command(["git", "commit", "-m", "Update pyproject.toml"], REPO_ROOT)  # Commit changes
+    # Check and copy pyproject.toml
+    if os.path.exists(pyproject_source):
+        print(f"Found pyproject.toml source: {pyproject_source}")
+        if not os.path.exists(pyproject_copy) or os.path.getmtime(pyproject_copy) < os.path.getmtime(pyproject_source):
+            print(f"Copying {pyproject_source} to {pyproject_copy}")
+            shutil.copy(pyproject_source, pyproject_copy)
+            run_git_command(["git", "add", pyproject_copy], REPO_ROOT)
+            run_git_command(["git", "commit", "-m", "Update pyproject.toml"], REPO_ROOT)
+        else:
+            print(f"{pyproject_copy} already exists and is up-to-date.")
     else:
-        print(f"{pyproject_copy} already exists and is up-to-date.")
+        print(f"pyproject.toml source not found: {pyproject_source}")
+
+    # Check and copy Dockerfile
+    if os.path.exists(dockerfile_source):
+        print(f"Found Dockerfile source: {dockerfile_source}")
+        if not os.path.exists(dockerfile_copy) or os.path.getmtime(dockerfile_copy) < os.path.getmtime(dockerfile_source):
+            print(f"Copying {dockerfile_source} to {dockerfile_copy}")
+            shutil.copy(dockerfile_source, dockerfile_copy)
+            run_git_command(["git", "add", dockerfile_copy], REPO_ROOT)
+            run_git_command(["git", "commit", "-m", "Update Dockerfile"], REPO_ROOT)
+        else:
+            print(f"{dockerfile_copy} already exists and is up-to-date.")
+    else:
+        print(f"Dockerfile source not found: {dockerfile_source}")
+
+    # Check and copy docker-compose.yaml
+    if os.path.exists(docker_compose_source):
+        print(f"Found docker-compose.yaml source: {docker_compose_source}")
+        if not os.path.exists(docker_compose_copy) or os.path.getmtime(docker_compose_copy) < os.path.getmtime(docker_compose_source):
+            print(f"Copying {docker_compose_source} to {docker_compose_copy}")
+            shutil.copy(docker_compose_source, docker_compose_copy)
+            run_git_command(["git", "add", docker_compose_copy], REPO_ROOT)
+            run_git_command(["git", "commit", "-m", "Update docker-compose.yaml"], REPO_ROOT)
+        else:
+            print(f"{docker_compose_copy} already exists and is up-to-date.")
+    else:
+        print(f"docker-compose.yaml source not found: {docker_compose_source}")
 
 # Initialize ChromaDB globally so we can use it in FastAPI
 client = chromadb.PersistentClient(path=os.path.expanduser(CHROMADB_DB_PATH))
