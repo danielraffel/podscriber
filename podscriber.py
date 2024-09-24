@@ -30,6 +30,49 @@ PODCAST_HISTORY_FILE = os.path.expanduser(PODCAST_HISTORY_FILE)
 TRANSCRIBED_FOLDER = os.path.join(REPO_ROOT, "transcribed")
 CHROMADB_DB_PATH = os.path.expanduser(CHROMADB_DB_PATH)
 
+# Get podcast entries from ChromaDB
+def get_podcast_entries(podcast_collection):
+    # Query all documents from the ChromaDB collection
+    results = podcast_collection.get()
+
+    # Initialize an empty list to store the entries
+    entries = []
+
+    # Check if results contain documents
+    if 'documents' in results and len(results['documents']) > 0:
+        documents = results['documents']
+        ids = results['ids']
+        metadatas = results.get('metadatas', [])
+        
+        # Loop through each document and metadata
+        for document, guid, metadata in zip(documents, ids, metadatas):
+            # Extract metadata fields, with defaults for missing data
+            podcast_name = metadata.get("podcast_name", "Unknown Podcast")
+            episode_title = metadata.get("episode_title", "Unknown Episode")
+            listen_date = metadata.get("listenDate", "Unknown Date")
+            mp3_url = metadata.get("mp3_url", "#")  
+            link = metadata.get("link", "#")  
+
+            # Construct the transcript URL
+            transcript_github_url = f"https://raw.githubusercontent.com/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/main/transcribed/{normalize_folder_name(podcast_name)}/{normalize_folder_name(episode_title)}.txt"
+
+            # Update metadata with mp3_url and transcript_url
+            metadata['mp3_url'] = mp3_url
+            metadata['transcript_url'] = transcript_github_url  # Now this is defined
+
+            # Append each entry as a dictionary
+            entries.append({
+                "podcast_name": podcast_name,
+                "episode_title": episode_title,
+                "listen_date": listen_date,
+                "transcript_url": transcript_github_url,  # Ensure this is included
+                "mp3_url": mp3_url,
+                "link": link,
+                "guid": guid
+            })
+
+    return entries
+
 # Check if git is installed and error out if not
 def check_git_installed():
     """Ensure git is installed on the system."""
@@ -414,7 +457,7 @@ def add_podcast_to_db_chroma(metadata, mp3_url, transcript_name, transcript_text
         ids=[metadata['guid']],  # Use the GUID as the document ID
         metadatas=[metadata]  # Store the entire metadata dictionary
     )
-    print("Data committed to ChromaDB.")
+    print(f"Data committed to ChromaDB with transcript URL: {transcript_github_url}")
 
 # Generate the HTML file from the ChromaDB collection
 def generate_html_from_chroma_db(history_file):
@@ -854,6 +897,9 @@ def save_downloaded_url(history_file, metadata, transcript_name):
     # Construct the transcript URL on GitHub
     transcript_github_url = f"https://raw.githubusercontent.com/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/main/transcribed/{normalize_folder_name(metadata['podcast_name'])}/{transcript_name}"
     
+    # Add transcript_url to metadata
+    metadata['transcript_url'] = transcript_github_url
+
     # Handle case where link might be None or empty
     pod_site_link = f"<a href=\"{html.escape(metadata.get('link', ''))}\" target=\"_blank\">Pod Site</a>" if metadata.get('link') else "N/A"
     

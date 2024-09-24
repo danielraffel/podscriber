@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Podcast &#x1F442; Archive{% endblock %}
+
+{% block content %}
+<h2 class="text-3xl font-bold mb-4">Podcast &#x1F442; Archive</h2>
+<table id="podcastTable" class="min-w-full bg-white shadow-md rounded-lg overflow-hidden">
+    <thead>
+        <tr class="bg-blue-500 text-white uppercase text-sm leading-normal">
+            <th class="py-3 px-6 text-left">Podcast</th>
+            <th class="py-3 px-6 text-left">Episode</th>
+            <th class="py-3 px-6 text-left">Listen Date</th>
+            <th class="py-3 px-6 text-left">Transcript</th>
+            <th class="py-3 px-6 text-left">Stream</th>
+        </tr>
+    </thead>
+    <tbody class="text-gray-600 text-sm font-light">
+        {% for entry in entries %}
+        <tr class="hover:bg-gray-100">
+            <td class="py-4 px-6 border-b text-lg">
+                <a href="{{ entry.link }}" target="_blank" class="text-blue-600 hover:underline">{{ entry.podcast_name }}</a>
+            </td>
+            <td class="py-4 px-6 border-b text-lg">
+                <a href="{{ entry.guid }}" target="_blank" class="text-blue-600 hover:underline">{{ entry.episode_title }}</a>
+            </td>
+            <td class="py-4 px-6 border-b text-lg">{{ entry.listen_date }}</td>
+            <td class="py-4 px-6 border-b text-lg">
+                <a href="{{ entry.transcript_url }}" target="_blank" class="text-blue-500 text-lg">&#x1F4C4;</a>
+            </td>
+            <td class="py-4 px-6 border-b text-lg">
+                <audio src="{{ entry.mp3_url }}" controls class="w-8 h-8"></audio>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
