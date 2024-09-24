@@ -327,9 +327,6 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
                 print(f"Error during git stash pop: {result.stderr}")
                 return False
 
-        # Proceed to add and commit files as before
-        # [Rest of the code remains the same]
-
         # Stage the entire ChromaDB database directory
         if db_path:
             print(f"Adding to Git: {os.path.relpath(db_path, repo_root)}")
