@@ -22,6 +22,7 @@ def show_help():
       --no-delete-transcribed Skip deleting files in the transcribed folder
       --no-delete-repo        Skip deleting the GitHub repository
       --reset                 Delete the entire local repo folder and remote GitHub repo
+      --reset-local-only      Delete only the local repo folder, leave GitHub repo intact
       -h, --help              Show this help message
     """
     print(help_message)
@@ -79,7 +80,7 @@ def delete_folder_contents(path):
     else:
         print(f"Path does not exist: {path}")
 
-# Default flags (all operations enabled)
+# Default flags
 DELETE_GIT = True
 DELETE_CHROMADB = True
 DELETE_CHROMAHASH = True
@@ -87,7 +88,8 @@ DELETE_HISTORY = True
 DELETE_AUDIO = True
 DELETE_TRANSCRIBED = True
 DELETE_REPO = True
-RESET = False  # New flag for resetting the entire repo
+RESET = False
+RESET_LOCAL_ONLY = False  # New flag for resetting only the local repo
 
 # Parse command-line arguments
 for arg in sys.argv[1:]:
@@ -108,7 +110,9 @@ for arg in sys.argv[1:]:
     elif arg == "--no-delete-repo":
         DELETE_REPO = False
     elif arg == "--reset":
-        RESET = True  # Set the reset flag if the --reset option is provided
+        RESET = True
+    elif arg == "--reset-local-only":
+        RESET_LOCAL_ONLY = True
     else:
         print(f"Unknown option: {arg}")
         show_help()
@@ -147,11 +151,14 @@ def delete_remote_repo():
     else:
         print(f"Failed to delete remote repository: {response.status_code}")
 
-# Check if the reset flag is set
+# Check flags and perform actions
 if RESET:
     # If reset flag is set, delete both local and remote repositories
     delete_local_repo()
     delete_remote_repo()
+elif RESET_LOCAL_ONLY:
+    # If reset-local-only flag is set, only delete the local repository
+    delete_local_repo()
 else:
     # Perform individual deletion operations based on flags
     if DELETE_GIT:
