@@ -17,11 +17,104 @@ from config import (
     GITHUB_USERNAME, GITHUB_TOKEN, GITHUB_REPO_PRIVATE, DEBUG_MODE_LIMIT, 
     REPO_ROOT, ENABLE_GITHUB_PAGES,
     WHISPER_SETUP, WHISPER_ROOT,CHROMADB_DB_PATH, TOKENIZERS_PARALLELISM,
-    USE_EXISTING_DATA
+    USE_EXISTING_DATA, APP_ENTRY, JINJA_TEMPLATES
 )
 
 # Set Hugging Face Tokenizers environment variable
 os.environ["TOKENIZERS_PARALLELISM"] = TOKENIZERS_PARALLELISM
+
+def copy_files_to_repo_root():
+    """Ensure the APP_ENTRY, JINJA_TEMPLATES, pyproject.toml, config.py, Dockerfile, and docker-compose.yaml are copied into the Git repository."""
+    app_entry_copy = os.path.join(REPO_ROOT, "main.py")
+    jinja_templates_copy = os.path.join(REPO_ROOT, "templates")
+    config_copy = os.path.join(REPO_ROOT, "config.py")
+    pyproject_copy = os.path.join(REPO_ROOT, "pyproject.toml")
+    dockerfile_copy = os.path.join(REPO_ROOT, "Dockerfile")
+    docker_compose_copy = os.path.join(REPO_ROOT, "docker-compose.yaml")
+    
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    config_source = os.path.join(script_dir, "repo_root_config.py")
+    pyproject_source = os.path.join(script_dir, "pyproject.toml")
+    dockerfile_source = os.path.join(script_dir, "Dockerfile")
+    docker_compose_source = os.path.join(script_dir, "docker-compose.yaml")
+
+    # Check and copy APP_ENTRY file
+    if os.path.exists(APP_ENTRY):
+        print(f"Found APP_ENTRY: {APP_ENTRY}")
+        if not os.path.exists(app_entry_copy) or os.path.getmtime(app_entry_copy) < os.path.getmtime(APP_ENTRY):
+            print(f"Copying {APP_ENTRY} to {app_entry_copy}")
+            shutil.copy(APP_ENTRY, app_entry_copy)
+            run_git_command(["git", "add", app_entry_copy], REPO_ROOT)
+            run_git_command(["git", "commit", "-m", "Update main.py"], REPO_ROOT)
+        else:
+            print(f"{app_entry_copy} already exists and is up-to-date.")
+    else:
+        print(f"APP_ENTRY not found: {APP_ENTRY}")
+
+    # Check and copy JINJA_TEMPLATES directory
+    if os.path.exists(JINJA_TEMPLATES):
+        print(f"Found JINJA_TEMPLATES: {JINJA_TEMPLATES}")
+        if not os.path.exists(jinja_templates_copy):
+            print(f"Copying {JINJA_TEMPLATES} to {jinja_templates_copy}")
+            shutil.copytree(JINJA_TEMPLATES, jinja_templates_copy)
+            run_git_command(["git", "add", jinja_templates_copy], REPO_ROOT)
+            run_git_command(["git", "commit", "-m", "Update templates"], REPO_ROOT)
+        else:
+            print(f"{jinja_templates_copy} already exists.")
+    else:
+        print(f"JINJA_TEMPLATES not found: {JINJA_TEMPLATES}")
+
+    # Check and copy config.py
+    if os.path.exists(config_source):
+        print(f"Found config source: {config_source}")
+        if not os.path.exists(config_copy) or os.path.getmtime(config_copy) < os.path.getmtime(config_source):
+            print(f"Copying {config_source} to {config_copy}")
+            shutil.copy(config_source, config_copy)
+            run_git_command(["git", "add", config_copy], REPO_ROOT)
+            run_git_command(["git", "commit", "-m", "Update config.py"], REPO_ROOT)
+        else:
+            print(f"{config_copy} already exists and is up-to-date.")
+    else:
+        print(f"Config source not found: {config_source}")
+
+    # Check and copy pyproject.toml
+    if os.path.exists(pyproject_source):
+        print(f"Found pyproject.toml source: {pyproject_source}")
+        if not os.path.exists(pyproject_copy) or os.path.getmtime(pyproject_copy) < os.path.getmtime(pyproject_source):
+            print(f"Copying {pyproject_source} to {pyproject_copy}")
+            shutil.copy(pyproject_source, pyproject_copy)
+            run_git_command(["git", "add", pyproject_copy], REPO_ROOT)
+            run_git_command(["git", "commit", "-m", "Update pyproject.toml"], REPO_ROOT)
+        else:
+            print(f"{pyproject_copy} already exists and is up-to-date.")
+    else:
+        print(f"pyproject.toml source not found: {pyproject_source}")
+
+    # Check and copy Dockerfile
+    if os.path.exists(dockerfile_source):
+        print(f"Found Dockerfile source: {dockerfile_source}")
+        if not os.path.exists(dockerfile_copy) or os.path.getmtime(dockerfile_copy) < os.path.getmtime(dockerfile_source):
+            print(f"Copying {dockerfile_source} to {dockerfile_copy}")
+            shutil.copy(dockerfile_source, dockerfile_copy)
+            run_git_command(["git", "add", dockerfile_copy], REPO_ROOT)
+            run_git_command(["git", "commit", "-m", "Update Dockerfile"], REPO_ROOT)
+        else:
+            print(f"{dockerfile_copy} already exists and is up-to-date.")
+    else:
+        print(f"Dockerfile source not found: {dockerfile_source}")
+
+    # Check and copy docker-compose.yaml
+    if os.path.exists(docker_compose_source):
+        print(f"Found docker-compose.yaml source: {docker_compose_source}")
+        if not os.path.exists(docker_compose_copy) or os.path.getmtime(docker_compose_copy) < os.path.getmtime(docker_compose_source):
+            print(f"Copying {docker_compose_source} to {docker_compose_copy}")
+            shutil.copy(docker_compose_source, docker_compose_copy)
+            run_git_command(["git", "add", docker_compose_copy], REPO_ROOT)
+            run_git_command(["git", "commit", "-m", "Update docker-compose.yaml"], REPO_ROOT)
+        else:
+            print(f"{docker_compose_copy} already exists and is up-to-date.")
+    else:
+        print(f"docker-compose.yaml source not found: {docker_compose_source}")
 
 # Configuration and Constants
 REPO_ROOT = os.path.expanduser(REPO_ROOT)
@@ -117,7 +210,6 @@ def check_github_ssh_connection():
 
 # Check if the GitHub repository exists, and create it if not
 def check_create_github_repo(repo_name):
-    """Check if the GitHub repository exists, and create it if not."""
     headers = {
         "Authorization": f"token {GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3+json"
@@ -130,11 +222,12 @@ def check_create_github_repo(repo_name):
         create_repo_url = "https://api.github.com/user/repos"
         data = {
             "name": repo_name,
-            "private": GITHUB_REPO_PRIVATE  # Use the setting from the config file
+            "private": GITHUB_REPO_PRIVATE
         }
         create_response = requests.post(create_repo_url, headers=headers, json=data)
         create_response.raise_for_status()
         print(f"Repository {repo_name} created successfully.")
+        create_initial_commit(REPO_ROOT)  # Call the initial commit function here
     else:
         print(f"Repository {repo_name} exists.")
 
@@ -148,55 +241,72 @@ def initialize_local_git_repo(repo_root):
     """Initialize the local Git repository or pull changes if it already exists."""
     if not os.path.exists(repo_root):
         print(f"Cloning repository into {repo_root}...")
-        if not run_git_command(["git", "clone", f"git@github.com:{GITHUB_USERNAME}/{GITHUB_REPO_NAME}.git", repo_root], cwd="."):
-            print("Failed to clone repository.")
-            return
+        run_git_command(["git", "clone", f"git@github.com:{GITHUB_USERNAME}/{GITHUB_REPO_NAME}.git", repo_root], cwd=".")
     else:
         if is_git_repo(repo_root):
-            print(f"Git repository already initialized in {repo_root}, pulling latest changes.")
-            if not run_git_command(["git", "pull", "origin", "main"], cwd=repo_root):
-                print("Failed to pull latest changes.")
-                return
+            print(f"Git repository already initialized in {repo_root}.")
+            # Check if 'main' branch exists
+            result = subprocess.run(["git", "show-ref", "--verify", "--quiet", "refs/heads/main"], cwd=repo_root)
+            if result.returncode != 0:
+                print("Creating 'main' branch...")
+                run_git_command(["git", "checkout", "-b", "main"], repo_root)
+            else:
+                print("'main' branch already exists.")
         else:
             print(f"Directory {repo_root} exists but is not a git repository. Initializing as git repository.")
-            if not run_git_command(["git", "init"], cwd=repo_root):
-                print("Failed to initialize git repository.")
-                return
-            if not run_git_command(["git", "remote", "add", "origin", f"git@github.com:{GITHUB_USERNAME}/{GITHUB_REPO_NAME}.git"], cwd=repo_root):
-                print("Failed to add remote origin.")
-                return
-            # Check if the remote has any commits
-            result = subprocess.run(["git", "ls-remote", "--heads", "origin"], cwd=repo_root, capture_output=True, text=True)
-            if result.stdout.strip():
-                # Remote repository has commits, pull them
-                if not run_git_command(["git", "pull", "origin", "main"], cwd=repo_root):
-                    print("Failed to pull from remote repository.")
-                    return
-                print("Pulled existing main branch from remote.")
-            else:
-                # Remote is empty, create initial commit and push
-                create_initial_commit(repo_root)
-                print("Created and pushed initial commit to main branch.")
+            run_git_command(["git", "init"], repo_root)
+            run_git_command(["git", "remote", "add", "origin", f"git@github.com:{GITHUB_USERNAME}/{GITHUB_REPO_NAME}.git"], repo_root)
+            run_git_command(["git", "checkout", "-b", "main"], repo_root)
 
-# Create the initial commit in the local Git repository and push it to the remote repository if it's empty
+# Ensure there's an initial commit in the repository
+def ensure_initial_commit(repo_root):
+    """Ensure there's an initial commit in the repository."""
+    # Check if there are any commits
+    result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo_root, capture_output=True, text=True)
+    if result.returncode != 0:
+        print("No commits found. Creating initial commit...")
+        # Create a README.md file
+        with open(os.path.join(repo_root, "README.md"), "w") as f:
+            f.write(f"# {GITHUB_REPO_NAME}\n\nThis repository contains podcast archives.")
+        
+        # Add and commit README.md
+        run_git_command(["git", "add", "README.md"], repo_root)
+        run_git_command(["git", "commit", "-m", "Initial commit"], repo_root)
+        
+        # Push to the remote repository
+        run_git_command(["git", "push", "-u", "origin", "main"], repo_root)
+        print("Initial commit created and pushed.")
+    else:
+        print("Repository already has commits.")
+
+# Create the initial commit in the local Git repository
 def create_initial_commit(repo_root):
     """Create the initial commit in the local Git repository."""
     readme_path = os.path.join(repo_root, "README.md")
     try:
         with open(readme_path, "w") as f:
             f.write(f"# {GITHUB_REPO_NAME}\n\nThis repository contains podcast archives.")
+        
+        # Add README to Git
         if not run_git_command(["git", "add", "README.md"], repo_root):
             print("Failed to add README.md to Git.")
             return
+
+        # Commit the README file
         if not run_git_command(["git", "commit", "-m", "Initial commit"], repo_root):
             print("Failed to commit README.md.")
             return
+
+        # Rename the branch to 'main'
         if not run_git_command(["git", "branch", "-M", "main"], repo_root):
             print("Failed to rename branch to main.")
             return
+
+        # Push the initial commit to the remote repository on the 'main' branch
         if not run_git_command(["git", "push", "-u", "origin", "main"], repo_root):
             print("Failed to push initial commit to remote.")
             return
+
         print("Initial commit created and pushed successfully.")
     except Exception as e:
         print(f"Error during initial commit: {e}")
@@ -229,7 +339,14 @@ def enable_github_pages():
         "Accept": "application/vnd.github.v3+json"
     }
     url = f"https://api.github.com/repos/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/pages"
-    
+
+    # Ensure the `main` branch exists before enabling GitHub Pages
+    result = subprocess.run(["git", "rev-parse", "--verify", "origin/main"], cwd=REPO_ROOT, capture_output=True, text=True)
+    if result.returncode != 0:
+        print("The 'main' branch does not exist yet. Skipping GitHub Pages setup.")
+        return
+
+    # Proceed to enable GitHub Pages after verifying the branch
     data = {
         "source": {
             "branch": "main",
@@ -433,9 +550,20 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
             ):
                 print("Failed to commit changes.")
                 return False
-            if not run_git_command(["git", "push", "origin", "main"], cwd=repo_root):
-                print("Failed to push changes to remote.")
-                return False
+
+            # Check if 'main' branch exists on remote
+            result = subprocess.run(["git", "ls-remote", "--exit-code", "--heads", "origin", "main"], cwd=repo_root, capture_output=True)
+            if result.returncode != 0:
+                print("'main' branch doesn't exist on remote. Pushing current branch.")
+                current_branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=repo_root, capture_output=True, text=True).stdout.strip()
+                if not run_git_command(["git", "push", "-u", "origin", current_branch], cwd=repo_root):
+                    print(f"Failed to push {current_branch} to remote.")
+                    return False
+            else:
+                if not run_git_command(["git", "push", "origin", "main"], cwd=repo_root):
+                    print("Failed to push changes to remote.")
+                    return False
+
             print("Database, HTML, and podcast files committed and pushed.")
             return True
         else:
@@ -964,6 +1092,12 @@ if __name__ == "__main__":
 
     # Initialize the local Git repository
     initialize_local_git_repo(REPO_ROOT)
+
+    # Ensure there's an initial commit
+    ensure_initial_commit(REPO_ROOT)
+
+    # Ensure APP_ENTRY and JINJA_TEMPLATES are copied to the Git repository
+    copy_files_to_repo_root()
     
     # Initialize ChromaDB after Git repository is synchronized
     global client, podcast_collection
