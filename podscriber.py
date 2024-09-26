@@ -24,13 +24,14 @@ from config import (
 os.environ["TOKENIZERS_PARALLELISM"] = TOKENIZERS_PARALLELISM
 
 def copy_files_to_repo_root():
-    """Ensure the APP_ENTRY, JINJA_TEMPLATES, pyproject.toml, config.py, Dockerfile, and docker-compose.yaml are copied into the Git repository."""
+    """Ensure the APP_ENTRY, JINJA_TEMPLATES, pyproject.toml, config.py, Dockerfile, docker-compose.yaml, and podscriber.py are copied into the Git repository."""
     app_entry_copy = os.path.join(REPO_ROOT, "main.py")
     jinja_templates_copy = os.path.join(REPO_ROOT, "templates")
     config_copy = os.path.join(REPO_ROOT, "config.py")
     pyproject_copy = os.path.join(REPO_ROOT, "pyproject.toml")
     dockerfile_copy = os.path.join(REPO_ROOT, "Dockerfile")
     docker_compose_copy = os.path.join(REPO_ROOT, "docker-compose.yaml")
+    podscriber_copy = os.path.join(REPO_ROOT, "podscriber.py")
     
     script_dir = os.path.dirname(os.path.abspath(__file__))
     config_source = os.path.join(script_dir, "repo_root_config.py")
@@ -115,6 +116,19 @@ def copy_files_to_repo_root():
             print(f"{docker_compose_copy} already exists and is up-to-date.")
     else:
         print(f"docker-compose.yaml source not found: {docker_compose_source}")
+
+    # Check and copy podscriber.py
+    if os.path.exists(os.path.join(script_dir, "podscriber.py")):
+        print(f"Found podscriber.py: {os.path.join(script_dir, 'podscriber.py')}")
+        if not os.path.exists(podscriber_copy) or os.path.getmtime(podscriber_copy) < os.path.getmtime(os.path.join(script_dir, "podscriber.py")):
+            print(f"Copying podscriber.py to {podscriber_copy}")
+            shutil.copy(os.path.join(script_dir, "podscriber.py"), podscriber_copy)
+            run_git_command(["git", "add", podscriber_copy], REPO_ROOT)
+            run_git_command(["git", "commit", "-m", "Update podscriber.py"], REPO_ROOT)
+        else:
+            print(f"{podscriber_copy} already exists and is up-to-date.")
+    else:
+        print(f"podscriber.py not found: {os.path.join(script_dir, 'podscriber.py')}")
 
 # Configuration and Constants
 REPO_ROOT = os.path.expanduser(REPO_ROOT)

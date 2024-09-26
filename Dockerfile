@@ -1,24 +1,49 @@
-# Start from a minimal base image since UV will manage Python and dependencies
-FROM alpine:latest
+# Use the recommended Python base image with slim build
+FROM python:3.12-slim-bookworm
 
 # Set environment variables
-ENV CHROMADB_DB_PATH=/home/chroma_db
+ENV CHROMADB_DB_PATH=/app/chroma_db
+ENV PATH="/root/.cargo/bin:$PATH"
 
-# Clone the podcast-archive repository and set the working directory
-WORKDIR /home
+# Install necessary system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    ca-certificates
 
-# Install necessary tools like git and curl
-RUN apk add --no-cache git curl
+# Create an application directory inside the container
+WORKDIR /app
 
-# Clone the podcast-archive GitHub repository
-RUN git clone https://github.com/danielraffel/podcast-archive.git
+# Clone the GitHub repository
+RUN git clone https://github.com/danielraffel/podcast-archive.git \
+    && echo "GitHub repository cloned successfully." || echo "Failed to clone GitHub repository."
+
+# Verify repository contents
+RUN ls -alh /app/podcast-archive || echo "Repository not found!"
 
 # Change to the podcast-archive directory
-WORKDIR /home/podcast-archive
+WORKDIR /app/podcast-archive
 
-# Install UV and sync project dependencies
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
-    && uv sync
+# Verify the current working directory
+RUN echo "Current working directory: $(pwd)"
+
+# Check for pyproject.toml
+RUN ls -alh pyproject.toml || echo "pyproject.toml not found!"
+
+# Install UV and verify installation
+RUN curl -LsSf https://astral.sh/uv/install.sh -o /uv-installer.sh \
+    && sh /uv-installer.sh \
+    && rm /uv-installer.sh \
+    && uv --version && echo "UV installed successfully!" || echo "UV installation failed!"
+
+# Run uv sync and check for errors
+RUN uv sync && echo "uv sync succeeded!" || echo "uv sync failed!"
+
+# Add virtual environment's bin directory to PATH
+ENV PATH="/app/podcast-archive/.venv/bin:$PATH"
+
+# Verify uvicorn installation
+RUN which uvicorn && echo "uvicorn installed successfully!" || echo "uvicorn not found in PATH"
 
 # Expose port 8000 for FastAPI
 EXPOSE 8000
