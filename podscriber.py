@@ -685,13 +685,19 @@ def commit_database_and_files(repo_root, db_path, history_file, new_files):
 def add_podcast_to_db_chroma(metadata, mp3_url, transcript_name, transcript_text):
     global podcast_collection
     metadata['mp3_url'] = mp3_url  # Store the mp3_url in the metadata
+
+    # Construct the transcript GitHub URL and add it to metadata
+    transcript_github_url = f"https://raw.githubusercontent.com/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}/main/transcribed/{normalize_folder_name(metadata['podcast_name'])}/{transcript_name}"
+    metadata['transcript_url'] = transcript_github_url  # Add transcript URL to metadata
+
     document = f"{metadata['podcast_name']} - {metadata['episode_title']}\nTranscript: {transcript_text}"
-    
+
     podcast_collection.upsert(
         documents=[document],  # Add the text of the transcript with additional metadata as a document
         ids=[metadata['guid']],  # Use the GUID as the document ID
         metadatas=[metadata]  # Store the entire metadata dictionary
     )
+
     print(f"Data committed to ChromaDB with transcript URL: {transcript_github_url}")
 
 # Generate the HTML file from the ChromaDB collection
@@ -895,6 +901,7 @@ def process_feed(feed_url, download_folder, history_file, debug=True):
                     # Add both the MP3 and WAV file paths to new_files for deletion later
                     wav_file = mp3_file_path.replace('.mp3', '.wav')
                     new_files.append((mp3_file_path, wav_file))  # Append tuple with MP3 and WAV paths
+                    print(f"Added to new_files: {mp3_file_path}, {wav_file}")
 
                     if debug:
                         print(f"Downloaded, transcribed, and saved: {mp3_url} as {filename} with transcript {new_transcript_path}")
@@ -1221,6 +1228,9 @@ if __name__ == "__main__":
     try:
         new_files = process_feed(RSS_FEED_URL, PODCAST_AUDIO_FOLDER, PODCAST_HISTORY_FILE, debug=True)
         print("RSS feed processing completed.")
+        
+        # Debugging statement to print whether new_files is empty or not
+        # print(f"New files to be deleted: {new_files}")
 
         # Regenerate the chroma hashes after updating the database
         generate_chroma_hashes(CHROMADB_DB_PATH, REPO_ROOT, hash_file)
@@ -1233,14 +1243,26 @@ if __name__ == "__main__":
                 print("No changes to upload to GitHub.")
    
     finally:
+        print(f"Attempting to delete {len(new_files)} files")
         # Always attempt to delete MP3 and WAV files after processing
         for mp3_file, wav_file in new_files:
             if os.path.exists(mp3_file):
-                os.remove(mp3_file)
-                print(f"Deleted MP3 file: {mp3_file}")
+                try:
+                    os.remove(mp3_file)
+                    print(f"Deleted MP3 file: {mp3_file}")
+                except Exception as e:
+                    print(f"Failed to delete MP3 file: {mp3_file}. Error: {e}")
+            else:
+                print(f"MP3 file not found: {mp3_file}")
+
             if os.path.exists(wav_file):
-                os.remove(wav_file)
-                print(f"Deleted WAV file: {wav_file}")
+                try:
+                    os.remove(wav_file)
+                    print(f"Deleted WAV file: {wav_file}")
+                except Exception as e:
+                    print(f"Failed to delete WAV file: {wav_file}. Error: {e}")
+            else:
+                print(f"WAV file not found: {wav_file}")
 
     try:
         subprocess.run(["git", "fetch", "origin"], cwd=REPO_ROOT, check=True)
