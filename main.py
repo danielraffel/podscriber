@@ -29,5 +29,5 @@ async def startup_event():
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
-    entries = get_podcast_entries()  # Fetch dynamic data from ChromaDB
+    entries = get_podcast_entries(podcast_collection)  # Fetch dynamic data from ChromaDB
     return templates.TemplateResponse("index.html", {"request": request, "entries": entries})
