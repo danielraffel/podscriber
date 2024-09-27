@@ -24,7 +24,7 @@ def show_help():
       --no-delete-repo        Skip deleting the GitHub repository
       --reset                 Delete the entire local repo folder and remote GitHub repo
       --reset-local-only      Delete only the local repo folder, leave GitHub repo intact
-      --reset-local-deploy-keys Reset deploy keys in config.txt and remove local key files
+      --reset-local-deploy-keys Reset deploy keys in config.py and remove local key files
       -h, --help              Show this help message
     """
     print(help_message)

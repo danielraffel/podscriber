@@ -28,7 +28,7 @@ from config import (
 os.environ["TOKENIZERS_PARALLELISM"] = TOKENIZERS_PARALLELISM
 
 def copy_files_to_repo_root():
-    """Ensure the APP_ENTRY, JINJA_TEMPLATES, pyproject.toml, config.py, Dockerfile, docker-compose.yaml, podscriber.py, and public SSH key are copied into the Git repository."""
+    """Ensure the APP_ENTRY, JINJA_TEMPLATES, pyproject.toml, config.py, Dockerfile, docker-compose.yaml, podscriber.py, and private SSH key are copied into the Git repository."""
     app_entry_copy = os.path.join(REPO_ROOT, "main.py")
     jinja_templates_copy = os.path.join(REPO_ROOT, "templates")
     config_copy = os.path.join(REPO_ROOT, "config.py")
@@ -145,20 +145,20 @@ def copy_files_to_repo_root():
     else:
         print(f"podscriber.py not found: {os.path.join(script_dir, 'podscriber.py')}")
 
-    # Check and copy public SSH key
-    public_ssh_key_source = os.path.expanduser(PUBLIC_SSH_KEY)
-    if os.path.exists(public_ssh_key_source):
-        print(f"Found public SSH key: {public_ssh_key_source}")
-        public_ssh_key_copy = os.path.join(REPO_ROOT, os.path.basename(public_ssh_key_source))
-        if not os.path.exists(public_ssh_key_copy) or not filecmp.cmp(public_ssh_key_source, public_ssh_key_copy):
-            print(f"Copying {public_ssh_key_source} to {public_ssh_key_copy}")
-            shutil.copy(public_ssh_key_source, public_ssh_key_copy)
-            run_git_command(["git", "add", public_ssh_key_copy], REPO_ROOT)
-            run_git_command(["git", "commit", "-m", "Update public SSH key"], REPO_ROOT)
+    # Check and copy private SSH key
+    private_ssh_key_source = os.path.expanduser(PRIVATE_SSH_KEY)  # Changed to PRIVATE_SSH_KEY
+    if os.path.exists(private_ssh_key_source):
+        print(f"Found private SSH key: {private_ssh_key_source}")
+        private_ssh_key_copy = os.path.join(REPO_ROOT, os.path.basename(private_ssh_key_source))
+        if not os.path.exists(private_ssh_key_copy) or not filecmp.cmp(private_ssh_key_source, private_ssh_key_copy):
+            print(f"Copying {private_ssh_key_source} to {private_ssh_key_copy}")
+            shutil.copy(private_ssh_key_source, private_ssh_key_copy)
+            run_git_command(["git", "add", private_ssh_key_copy], REPO_ROOT)
+            run_git_command(["git", "commit", "-m", "Update private SSH key"], REPO_ROOT)
         else:
-            print(f"{public_ssh_key_copy} already exists and is up-to-date.")
+            print(f"{private_ssh_key_copy} already exists and is up-to-date.")
     else:
-        print(f"Public SSH key not found: {public_ssh_key_source}")
+        print(f"Private SSH key not found: {private_ssh_key_source}")
 
 # Configuration and Constants
 REPO_ROOT = os.path.expanduser(REPO_ROOT)
