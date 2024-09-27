@@ -271,7 +271,44 @@ def generate_ssh_keys(repo_name):
     # Update config.py with the new key names
     update_config_with_keys(public_key_name, private_key_name)
 
+    # Modify the Dockerfile to use the new private key
+    modify_dockerfile_for_ssh_key(private_key_name)
+
     return public_key_path, private_key_path
+
+def modify_dockerfile_for_ssh_key(private_key_name):
+    """Modify the Dockerfile to use the SSH key for cloning the repository."""
+    dockerfile_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Dockerfile")
+    
+    print(f"Before modification, Dockerfile content:")
+    with open(dockerfile_path, 'r') as file:
+        before_content = file.read()
+        print(before_content)
+    
+    # Define the new SSH clone command
+    new_clone_command = f"""# Clone the GitHub repository using an SSH key
+RUN GIT_SSH_COMMAND='ssh -i /tmp/{private_key_name}' git clone git@github.com:{GITHUB_USERNAME}/{GITHUB_REPO_NAME}.git \\
+    && echo "GitHub repository cloned successfully using SSH." || echo "Failed to clone GitHub repository using SSH."
+"""
+
+    # Use regex to replace the entire clone command block
+    pattern = r'(# Clone the GitHub repository.*?RUN\s+)(.*?)(\s+&&.*?clone GitHub repository\..*?")'
+    updated_content = re.sub(pattern, new_clone_command.strip(), before_content, flags=re.DOTALL)
+
+    with open(dockerfile_path, 'w') as file:
+        file.write(updated_content)
+
+    print(f"After modification, Dockerfile content:")
+    with open(dockerfile_path, 'r') as file:
+        after_content = file.read()
+        print(after_content)
+
+    print(f"Updated Dockerfile to use SSH key {private_key_name} for cloning.")
+
+    if before_content == after_content:
+        print("Warning: Dockerfile content did not change after modification.")
+    else:
+        print("Dockerfile was successfully modified.")
 
 def update_config_with_keys(public_key_name, private_key_name):
     """Update the config.py file with the new SSH key names."""

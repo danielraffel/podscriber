@@ -14,10 +14,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Create an application directory inside the container
 WORKDIR /app
 
-# Clone the GitHub repository
+# Clone the GitHub repository without a key
 RUN git clone https://github.com/danielraffel/podcast-archive.git \
     && echo "GitHub repository cloned successfully." || echo "Failed to clone GitHub repository."
-
+    
 # Verify repository contents
 RUN ls -alh /app/podcast-archive || echo "Repository not found!"
 

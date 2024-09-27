@@ -109,15 +109,14 @@ def delete_remote_repo():
     else:
         print(f"Failed to delete remote repository: {response.status_code}")
 
-# New function to reset deploy keys
+# Function to reset deploy keys and update the Dockerfile
 def reset_deploy_keys():
     """
-    Reset the PUBLIC_SSH_KEY and PRIVATE_SSH_KEY values in config.py to their default values
-    and remove the corresponding key files from the local machine.
+    Reset the PUBLIC_SSH_KEY and PRIVATE_SSH_KEY values in config.py to their default values,
+    remove the corresponding key files from the local machine, and update the Dockerfile.
     """
-    # If you want to reset the deploy keys in the repo_root config.py file, uncomment the following line:
-    # config_file = os.path.join(REPO_ROOT, 'config.py')
-    config_file = os.path.join(os.path.dirname(__file__), 'config.py')  # Change to current directory
+    # Config file update logic
+    config_file = os.path.join(os.path.dirname(__file__), 'config.py')
     if not os.path.exists(config_file):
         print(f"Config file not found: {config_file}")
         return
@@ -125,7 +124,7 @@ def reset_deploy_keys():
     with open(config_file, 'r') as f:
         config_content = f.read()
 
-    # Update config values
+    # Update the SSH key paths in config.py
     config_content = re.sub(r'PUBLIC_SSH_KEY\s*=\s*"[^"]*"', f'PUBLIC_SSH_KEY = "~/.ssh/{GITHUB_REPO_NAME}_randomstring.pub"', config_content)
     config_content = re.sub(r'PRIVATE_SSH_KEY\s*=\s*"[^"]*"', f'PRIVATE_SSH_KEY = "~/.ssh/{GITHUB_REPO_NAME}_randomstring"', config_content)
 
@@ -134,22 +133,61 @@ def reset_deploy_keys():
 
     print("Updated config.py with default deploy key values")
 
-    # Remove existing key files
-    public_key_path = os.path.expanduser(f"~/.ssh/{GITHUB_REPO_NAME}_*.pub")
-    private_key_path = os.path.expanduser(f"~/.ssh/{GITHUB_REPO_NAME}_*")
+    # Key file removal logic
+    public_key_path_pattern = os.path.expanduser(f"~/.ssh/{GITHUB_REPO_NAME}_*.pub")
+    private_key_path_pattern = os.path.expanduser(f"~/.ssh/{GITHUB_REPO_NAME}_*")
 
-    keys_removed = False  # Track if any keys were removed
+    keys_removed = False
 
-    for key_path in [public_key_path, private_key_path]:
-        matching_files = [f for f in os.listdir(os.path.dirname(key_path)) if os.path.basename(key_path).replace('*', '') in f]
-        for file in matching_files:
-            full_path = os.path.join(os.path.dirname(key_path), file)
-            os.remove(full_path)
-            print(f"Removed key file: {full_path}")
-            keys_removed = True
+    # Remove matching public and private key files
+    for key_path_pattern in [public_key_path_pattern, private_key_path_pattern]:
+        key_dir = os.path.dirname(key_path_pattern)
+        key_basename_pattern = os.path.basename(key_path_pattern).replace('*', '')
+        if os.path.exists(key_dir):
+            matching_files = [f for f in os.listdir(key_dir) if f.startswith(key_basename_pattern)]
+            for file in matching_files:
+                full_path = os.path.join(key_dir, file)
+                os.remove(full_path)
+                print(f"Removed key file: {full_path}")
+                keys_removed = True
 
     if not keys_removed:
         print("No SSH key files found to remove.")
+
+    # Dockerfile reset logic
+    dockerfile_path = os.path.join(os.path.dirname(__file__), 'Dockerfile')
+    if os.path.exists(dockerfile_path):
+        with open(dockerfile_path, 'r') as f:
+            dockerfile_content = f.read()
+
+        # Define the new HTTPS clone command with an extra newline at the end
+        new_clone_command = """# Clone the GitHub repository without a key
+RUN git clone https://github.com/danielraffel/podcast-archive.git \\
+    && echo "GitHub repository cloned successfully." || echo "Failed to clone GitHub repository."
+"""
+
+        # Define a regex pattern to match the SSH clone block
+        ssh_clone_pattern = r"""# Clone the GitHub repository using an SSH key
+RUN GIT_SSH_COMMAND='ssh -i /tmp/podcast-archive_\w+' git clone git@github\.com:danielraffel/podcast-archive\.git \\
+    && echo "GitHub repository cloned successfully using SSH\." \|\| echo "Failed to clone GitHub repository using SSH\."\n*"""
+
+        # Replace the SSH clone block with the HTTPS clone command
+        dockerfile_content, num_subs = re.subn(
+            ssh_clone_pattern,
+            new_clone_command,
+            dockerfile_content,
+            flags=re.DOTALL
+        )
+
+        if num_subs > 0:
+            with open(dockerfile_path, 'w') as f:
+                f.write(dockerfile_content)
+            print("Updated Dockerfile to clone repository without a key. Reset to use HTTPS instead of SSH.")
+        else:
+            print("No SSH clone block found in Dockerfile; no changes made.")
+    else:
+        print("Dockerfile not found; no changes made.")
+
 
 # Default flags
 DELETE_GIT = True
