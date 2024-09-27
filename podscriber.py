@@ -8,6 +8,9 @@ import subprocess
 import shutil
 import hashlib
 import chromadb
+import random
+import string
+import filecmp
 
 # Import configuration
 from config import (
@@ -17,14 +20,19 @@ from config import (
     GITHUB_USERNAME, GITHUB_TOKEN, GITHUB_REPO_PRIVATE, DEBUG_MODE_LIMIT, 
     REPO_ROOT, ENABLE_GITHUB_PAGES,
     WHISPER_SETUP, WHISPER_ROOT,CHROMADB_DB_PATH, TOKENIZERS_PARALLELISM,
-    USE_EXISTING_DATA, APP_ENTRY, JINJA_TEMPLATES
+    USE_EXISTING_DATA, APP_ENTRY, JINJA_TEMPLATES, PUBLIC_SSH_KEY, PRIVATE_SSH_KEY,
+    USE_GITHUB_DEPLOY_KEY, GITHUB_PRO_ACCOUNT
 )
 
 # Set Hugging Face Tokenizers environment variable
 os.environ["TOKENIZERS_PARALLELISM"] = TOKENIZERS_PARALLELISM
 
+# Expand user paths for public and private SSH keys
+public_ssh_key_path = os.path.expanduser(PUBLIC_SSH_KEY)
+private_ssh_key_path = os.path.expanduser(PRIVATE_SSH_KEY)
+
 def copy_files_to_repo_root():
-    """Ensure the APP_ENTRY, JINJA_TEMPLATES, pyproject.toml, config.py, Dockerfile, docker-compose.yaml, and podscriber.py are copied into the Git repository."""
+    """Ensure the APP_ENTRY, JINJA_TEMPLATES, pyproject.toml, config.py, Dockerfile, docker-compose.yaml, podscriber.py and public SSH key are copied into the Git repository."""
     app_entry_copy = os.path.join(REPO_ROOT, "main.py")
     jinja_templates_copy = os.path.join(REPO_ROOT, "templates")
     config_copy = os.path.join(REPO_ROOT, "config.py")
@@ -65,18 +73,29 @@ def copy_files_to_repo_root():
     else:
         print(f"JINJA_TEMPLATES not found: {JINJA_TEMPLATES}")
 
-    # Check and copy config.py
-    if os.path.exists(config_source):
-        print(f"Found config source: {config_source}")
-        if not os.path.exists(config_copy) or os.path.getmtime(config_copy) < os.path.getmtime(config_source):
-            print(f"Copying {config_source} to {config_copy}")
+    # Check and copy config.py or repo_root_config.py based on repo visibility
+    if GITHUB_REPO_PRIVATE:
+        # If the repo is private, copy the actual config.py
+        if os.path.exists(config_source):
+            print(f"Copying config.py to {config_copy}")
             shutil.copy(config_source, config_copy)
             run_git_command(["git", "add", config_copy], REPO_ROOT)
             run_git_command(["git", "commit", "-m", "Update config.py"], REPO_ROOT)
         else:
-            print(f"{config_copy} already exists and is up-to-date.")
+            print(f"Config source not found: {config_source}")
     else:
-        print(f"Config source not found: {config_source}")
+        # If the repo is public, copy repo_root_config.py and rename it to config.py
+        if os.path.exists(config_source):
+            print(f"Found config source: {config_source}")
+            if not os.path.exists(config_copy) or os.path.getmtime(config_copy) < os.path.getmtime(config_source):
+                print(f"Copying {config_source} to {config_copy}")
+                shutil.copy(config_source, config_copy)
+                run_git_command(["git", "add", config_copy], REPO_ROOT)
+                run_git_command(["git", "commit", "-m", "Update config.py"], REPO_ROOT)
+            else:
+                print(f"{config_copy} already exists and is up-to-date.")
+        else:
+            print(f"Config source not found: {config_source}")
 
     # Check and copy pyproject.toml
     if os.path.exists(pyproject_source):
@@ -129,6 +148,21 @@ def copy_files_to_repo_root():
             print(f"{podscriber_copy} already exists and is up-to-date.")
     else:
         print(f"podscriber.py not found: {os.path.join(script_dir, 'podscriber.py')}")
+
+    # Check and copy public SSH key
+    public_ssh_key_source = os.path.expanduser(PUBLIC_SSH_KEY)
+    if os.path.exists(public_ssh_key_source):
+        print(f"Found public SSH key: {public_ssh_key_source}")
+        public_ssh_key_copy = os.path.join(REPO_ROOT, os.path.basename(public_ssh_key_source))
+        if not os.path.exists(public_ssh_key_copy) or not filecmp.cmp(public_ssh_key_source, public_ssh_key_copy):
+            print(f"Copying {public_ssh_key_source} to {public_ssh_key_copy}")
+            shutil.copy(public_ssh_key_source, public_ssh_key_copy)
+            run_git_command(["git", "add", public_ssh_key_copy], REPO_ROOT)
+            run_git_command(["git", "commit", "-m", "Update public SSH key"], REPO_ROOT)
+        else:
+            print(f"{public_ssh_key_copy} already exists and is up-to-date.")
+    else:
+        print(f"Public SSH key not found: {public_ssh_key_source}")
 
 # Configuration and Constants
 REPO_ROOT = os.path.expanduser(REPO_ROOT)
@@ -222,14 +256,64 @@ def check_github_ssh_connection():
         print(f"SSH connection to GitHub encountered an error: {e}")
         return False
 
-# Check if the GitHub repository exists, and create it if not
+def generate_random_string(length=8):
+    """Generate a random string of fixed length."""
+    letters = string.ascii_letters + string.digits
+    return ''.join(random.choice(letters) for i in range(length))
+
+def generate_ssh_keys(repo_name):
+    """Generate SSH keys for the specified repository."""
+    random_suffix = generate_random_string()
+    public_key_name = f"{repo_name}_{random_suffix}.pub"
+    private_key_name = f"{repo_name}_{random_suffix}"
+    public_key_path = os.path.expanduser(f"~/.ssh/{public_key_name}")
+    private_key_path = os.path.expanduser(f"~/.ssh/{private_key_name}")
+
+    # Generate SSH key pair
+    subprocess.run(["ssh-keygen", "-t", "rsa", "-b", "4096", "-f", private_key_path, "-N", ""], check=True)
+
+    # Update config.py with the new key names
+    update_config_with_keys(public_key_name, private_key_name)
+
+    return public_key_path, private_key_path
+
+def update_config_with_keys(public_key_name, private_key_name):
+    """Update the config.py file with the new SSH key names."""
+    config_path = "config.py"
+    
+    with open(config_path, 'r') as file:
+        config_content = file.read()
+
+    # Replace the placeholders with the actual filenames
+    config_content = re.sub(r'GITHUB_REPO_NAME_randomstring\.pub', public_key_name, config_content)
+    config_content = re.sub(r'GITHUB_REPO_NAME_randomstring', private_key_name, config_content)
+
+    with open(config_path, 'w') as file:
+        file.write(config_content)
+
+def add_deploy_key_to_repo(repo_name, public_key):
+    """Add the public SSH key as a deploy key to the GitHub repository."""
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    url = f"https://api.github.com/repos/{GITHUB_USERNAME}/{repo_name}/keys"
+    data = {
+        "title": f"Deploy Key for {repo_name}",
+        "key": open(public_key).read(),
+        "read_only": True
+    }
+    response = requests.post(url, headers=headers, json=data)
+    response.raise_for_status()
+    print(f"Deploy key added to {repo_name}.")
+
 def check_create_github_repo(repo_name):
     headers = {
         "Authorization": f"token {GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3+json"
     }
     url = f"https://api.github.com/repos/{GITHUB_USERNAME}/{repo_name}"
-    
+
     response = requests.get(url, headers=headers)
     if response.status_code == 404:
         print(f"Repository {repo_name} not found. Creating new repository...")
@@ -241,7 +325,11 @@ def check_create_github_repo(repo_name):
         create_response = requests.post(create_repo_url, headers=headers, json=data)
         create_response.raise_for_status()
         print(f"Repository {repo_name} created successfully.")
-        create_initial_commit(REPO_ROOT)  # Call the initial commit function here
+
+        # Check if we need to generate SSH keys
+        if GITHUB_REPO_PRIVATE and USE_GITHUB_DEPLOY_KEY:
+            public_key_path, private_key_path = generate_ssh_keys(repo_name)
+            add_deploy_key_to_repo(repo_name, public_key_path)
     else:
         print(f"Repository {repo_name} exists.")
 
@@ -339,6 +427,11 @@ def check_github_pages_enabled():
 # Enable GitHub Pages for the repository and update the README.md with the PODCAST_HISTORY_FILE link
 def enable_github_pages():
     """Enable GitHub Pages for the repository."""
+    # Check if the repository is private and the account is not Pro
+    if GITHUB_REPO_PRIVATE and not GITHUB_PRO_ACCOUNT:
+        print("Skipping GitHub Pages setup: Private repositories require a Pro account.")
+        return
+
     # Construct the URL to the podcast archive
     history_filename = os.path.basename(PODCAST_HISTORY_FILE)
     archive_url = f"https://{GITHUB_USERNAME}.github.io/{GITHUB_REPO_NAME}/{history_filename}"
