@@ -27,12 +27,8 @@ from config import (
 # Set Hugging Face Tokenizers environment variable
 os.environ["TOKENIZERS_PARALLELISM"] = TOKENIZERS_PARALLELISM
 
-# Expand user paths for public and private SSH keys
-public_ssh_key_path = os.path.expanduser(PUBLIC_SSH_KEY)
-private_ssh_key_path = os.path.expanduser(PRIVATE_SSH_KEY)
-
 def copy_files_to_repo_root():
-    """Ensure the APP_ENTRY, JINJA_TEMPLATES, pyproject.toml, config.py, Dockerfile, docker-compose.yaml, podscriber.py and public SSH key are copied into the Git repository."""
+    """Ensure the APP_ENTRY, JINJA_TEMPLATES, pyproject.toml, config.py, Dockerfile, docker-compose.yaml, podscriber.py, and public SSH key are copied into the Git repository."""
     app_entry_copy = os.path.join(REPO_ROOT, "main.py")
     jinja_templates_copy = os.path.join(REPO_ROOT, "templates")
     config_copy = os.path.join(REPO_ROOT, "config.py")
@@ -76,13 +72,13 @@ def copy_files_to_repo_root():
     # Check and copy config.py or repo_root_config.py based on repo visibility
     if GITHUB_REPO_PRIVATE:
         # If the repo is private, copy the actual config.py
-        if os.path.exists(config_source):
+        if os.path.exists("config.py"):
             print(f"Copying config.py to {config_copy}")
-            shutil.copy(config_source, config_copy)
+            shutil.copy("config.py", config_copy)
             run_git_command(["git", "add", config_copy], REPO_ROOT)
             run_git_command(["git", "commit", "-m", "Update config.py"], REPO_ROOT)
         else:
-            print(f"Config source not found: {config_source}")
+            print(f"config.py not found.")
     else:
         # If the repo is public, copy repo_root_config.py and rename it to config.py
         if os.path.exists(config_source):
@@ -280,16 +276,32 @@ def generate_ssh_keys(repo_name):
 def update_config_with_keys(public_key_name, private_key_name):
     """Update the config.py file with the new SSH key names."""
     config_path = "config.py"
-    
+
     with open(config_path, 'r') as file:
         config_content = file.read()
 
     # Replace the placeholders with the actual filenames
-    config_content = re.sub(r'GITHUB_REPO_NAME_randomstring\.pub', public_key_name, config_content)
-    config_content = re.sub(r'GITHUB_REPO_NAME_randomstring', private_key_name, config_content)
+    config_content = re.sub(
+        r'PUBLIC_SSH_KEY\s*=\s*".*"',
+        f'PUBLIC_SSH_KEY = "~/.ssh/{public_key_name}"',
+        config_content
+    )
+    config_content = re.sub(
+        r'PRIVATE_SSH_KEY\s*=\s*".*"',
+        f'PRIVATE_SSH_KEY = "~/.ssh/{private_key_name}"',
+        config_content
+    )
 
     with open(config_path, 'w') as file:
         file.write(config_content)
+
+    # Reload the config module to get the updated values
+    import importlib
+    import config
+    importlib.reload(config)
+    global PUBLIC_SSH_KEY, PRIVATE_SSH_KEY
+    PUBLIC_SSH_KEY = config.PUBLIC_SSH_KEY
+    PRIVATE_SSH_KEY = config.PRIVATE_SSH_KEY
 
 def add_deploy_key_to_repo(repo_name, public_key):
     """Add the public SSH key as a deploy key to the GitHub repository."""
