@@ -162,36 +162,37 @@ def reset_deploy_keys():
 
         # Define the new HTTPS clone command with an extra newline at the end
         new_clone_command = """# Clone the GitHub repository without a key
-RUN git clone https://github.com/{GITHUB_USERNAME}/{GITHUB_REPO_NAME}.git \\
+RUN git clone https://github.com/{}/{}.git \\
     && echo "GitHub repository cloned successfully." || echo "Failed to clone GitHub repository."
-"""
+""".format(GITHUB_USERNAME, GITHUB_REPO_NAME)
 
         # Define a regex pattern to match the SSH clone block
-        ssh_clone_pattern = r"""# Add the SSH key for private repo access
-COPY {GITHUB_REPO_NAME}_\w+ /tmp/{GITHUB_REPO_NAME}_\w+
-RUN chmod 600 /tmp/{GITHUB_REPO_NAME}_\w+
+        ssh_clone_pattern = r"""# Copy the private SSH key
+COPY {}_[a-zA-Z0-9]+ /tmp/{}_[a-zA-Z0-9]+
 
-# Add the SSH private key and set permissions
-ADD {GITHUB_REPO_NAME}_\w+ /tmp/{GITHUB_REPO_NAME}_\w+
-RUN chmod 600 /tmp/{GITHUB_REPO_NAME}_\w+
+# Set the right permissions for the SSH key
+RUN chmod 600 /tmp/{}_[a-zA-Z0-9]+
+
+# Add GitHub's SSH key to known hosts
+RUN mkdir -p /root/.ssh && ssh-keyscan github.com >> /root/.ssh/known_hosts
 
 # Clone the GitHub repository using the SSH key
-RUN GIT_SSH_COMMAND='ssh -i /tmp/{GITHUB_REPO_NAME}_\w+' git clone git@github\.com:{GITHUB_USERNAME}/{GITHUB_REPO_NAME}\.git \\
-    && echo "GitHub repository cloned successfully using SSH\." \|\| echo "Failed to clone GitHub repository using SSH\."
+RUN GIT_SSH_COMMAND='ssh -i /tmp/{}_[a-zA-Z0-9]+' git clone git@github.com:{}/{}.git \\
+    && echo "GitHub repository cloned successfully using SSH." \|\| echo "Failed to clone GitHub repository using SSH."
 
 # Remove the SSH private key for security reasons
-RUN rm /tmp/{GITHUB_REPO_NAME}_\w+\n*"""
+RUN rm /tmp/{}_[a-zA-Z0-9]+
+""".format(
+    GITHUB_REPO_NAME, GITHUB_REPO_NAME,
+    GITHUB_REPO_NAME,
+    GITHUB_REPO_NAME, GITHUB_USERNAME, GITHUB_REPO_NAME,
+    GITHUB_REPO_NAME
+)
 
         # Replace the SSH clone block with the HTTPS clone command
         dockerfile_content, num_subs = re.subn(
-            ssh_clone_pattern.format(
-                GITHUB_REPO_NAME=re.escape(GITHUB_REPO_NAME),
-                GITHUB_USERNAME=re.escape(GITHUB_USERNAME)
-            ),
-            new_clone_command.format(
-                GITHUB_USERNAME=GITHUB_USERNAME,
-                GITHUB_REPO_NAME=GITHUB_REPO_NAME
-            ),
+            ssh_clone_pattern,
+            new_clone_command,
             dockerfile_content,
             flags=re.DOTALL
         )

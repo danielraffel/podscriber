@@ -284,15 +284,16 @@ def modify_dockerfile_for_ssh_key(private_key_name, github_username, github_repo
     with open(dockerfile_path, 'r') as file:
         before_content = file.read()
     print(before_content)
-    
-    # Define the new SSH clone commands
-    new_clone_commands = f"""# Add the SSH key for private repo access
+
+    # Define the new SSH clone command block
+    new_clone_block = f"""# Copy the private SSH key
 COPY {private_key_name} /tmp/{private_key_name}
+
+# Set the right permissions for the SSH key
 RUN chmod 600 /tmp/{private_key_name}
 
-# Add the SSH private key and set permissions
-ADD {private_key_name} /tmp/{private_key_name}
-RUN chmod 600 /tmp/{private_key_name}
+# Add GitHub's SSH key to known hosts
+RUN mkdir -p /root/.ssh && ssh-keyscan github.com >> /root/.ssh/known_hosts
 
 # Clone the GitHub repository using the SSH key
 RUN GIT_SSH_COMMAND='ssh -i /tmp/{private_key_name}' git clone git@github.com:{github_username}/{github_repo_name}.git \\
@@ -301,19 +302,19 @@ RUN GIT_SSH_COMMAND='ssh -i /tmp/{private_key_name}' git clone git@github.com:{g
 # Remove the SSH private key for security reasons
 RUN rm /tmp/{private_key_name}
 """
-    
+
     # Use regex to replace the entire clone command block
     pattern = r'(# Clone the GitHub repository.*?RUN\s+)(.*?)(\s+&&.*?clone GitHub repository\..*?")'
-    updated_content = re.sub(pattern, new_clone_commands.strip(), before_content, flags=re.DOTALL)
-    
+    updated_content = re.sub(pattern, new_clone_block.strip(), before_content, flags=re.DOTALL)
+
     with open(dockerfile_path, 'w') as file:
         file.write(updated_content)
-    
+
     print(f"After modification, Dockerfile content:")
     with open(dockerfile_path, 'r') as file:
         after_content = file.read()
     print(after_content)
-    
+
     print(f"Updated Dockerfile to use SSH key {private_key_name} for cloning {github_username}/{github_repo_name}.")
     
     if before_content == after_content:
