@@ -285,8 +285,12 @@ def modify_dockerfile_for_ssh_key(private_key_name, github_username, github_repo
         before_content = file.read()
     print(before_content)
     
-    # Define the new SSH clone block
-    new_clone_block = f"""# Add the SSH private key and set permissions
+    # Define the new SSH clone commands
+    new_clone_commands = f"""# Add the SSH key for private repo access
+COPY {private_key_name} /tmp/{private_key_name}
+RUN chmod 600 /tmp/{private_key_name}
+
+# Add the SSH private key and set permissions
 ADD {private_key_name} /tmp/{private_key_name}
 RUN chmod 600 /tmp/{private_key_name}
 
@@ -300,7 +304,7 @@ RUN rm /tmp/{private_key_name}
     
     # Use regex to replace the entire clone command block
     pattern = r'(# Clone the GitHub repository.*?RUN\s+)(.*?)(\s+&&.*?clone GitHub repository\..*?")'
-    updated_content = re.sub(pattern, new_clone_block.strip(), before_content, flags=re.DOTALL)
+    updated_content = re.sub(pattern, new_clone_commands.strip(), before_content, flags=re.DOTALL)
     
     with open(dockerfile_path, 'w') as file:
         file.write(updated_content)

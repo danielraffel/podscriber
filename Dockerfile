@@ -5,11 +5,13 @@ FROM python:3.12-slim-bookworm
 ENV CHROMADB_DB_PATH=/app/chroma_db
 ENV PATH="/root/.cargo/bin:$PATH"
 
-# Install necessary system dependencies
+# Install necessary system dependencies, including openssh-client
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
-    ca-certificates
+    ca-certificates \
+    openssh-client \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create an application directory inside the container
 WORKDIR /app
@@ -38,6 +40,10 @@ RUN curl -LsSf https://astral.sh/uv/install.sh -o /uv-installer.sh \
 
 # Run uv sync and check for errors
 RUN uv sync && echo "uv sync succeeded!" || echo "uv sync failed!"
+
+# Check where Python packages are installed by uv sync
+RUN ls -alh /app/podcast-archive/.venv || echo "Virtual environment not found!"
+RUN ls -alh /app/podcast-archive/.venv/bin || echo "Bin directory not found!"
 
 # Add virtual environment's bin directory to PATH
 ENV PATH="/app/podcast-archive/.venv/bin:$PATH"
