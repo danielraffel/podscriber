@@ -51,6 +51,9 @@ ENV PATH="/app/podcast-archive/.venv/bin:$PATH"
 # Verify uvicorn installation
 RUN which uvicorn && echo "uvicorn installed successfully!" || echo "uvicorn not found in PATH"
 
+# As a backup, explicitly install uvicorn if not installed
+RUN pip install --no-cache-dir uvicorn
+
 # Expose port 8000 for FastAPI
 EXPOSE 8000
 
